@@ -333,6 +333,7 @@ class _WidgetFormDialogState extends State<_WidgetFormDialog> {
 
               // Field type dropdown
               DropdownButtonFormField<FieldType>(
+                // ignore: deprecated_member_use
                 value: _selectedType,
                 decoration: const InputDecoration(
                   labelText: 'Field Type',

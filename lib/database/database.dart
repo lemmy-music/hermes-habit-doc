@@ -1,6 +1,7 @@
 // ignore_for_file: unnecessary_import
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 part 'database.g.dart';
 
@@ -41,9 +42,17 @@ class AppDatabase extends _$AppDatabase {
   ///
   /// [driftDatabase] from package:drift_flutter handles web vs. native:
   ///   - On native: opens a sqlite3 file in the documents directory.
-  ///   - On web:    uses IndexedDB storage (no dart:ffi, no dart:io).
+  ///   - On web:    uses WASM + IndexedDB storage (no dart:ffi, no dart:io).
   static QueryExecutor _openConnection() {
-    return driftDatabase(name: 'habit_doc_db');
+    return driftDatabase(
+      name: 'habit_doc_db',
+      web: kIsWeb
+          ? DriftWebOptions(
+              sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+              driftWorker: Uri.parse('drift_worker.js'),
+            )
+          : null,
+    );
   }
 
   // ── CustomWidgets CRUD ────────────────────────────────────────────────────
