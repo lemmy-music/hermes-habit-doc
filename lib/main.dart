@@ -14,7 +14,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   final AppDatabase database;
 
-  const MyApp({required this.database});
+  const MyApp({Key? key, required this.database}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +22,7 @@ class MyApp extends StatelessWidget {
       value: database,
       child: MaterialApp(
         title: 'Habit Doc',
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: Colors.blue,
@@ -71,15 +72,18 @@ class _MainNavigationState extends State<MainNavigation> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home),
-            label: 'Home',
+            icon: Icon(Icons.widgets_outlined),
+            selectedIcon: Icon(Icons.widgets),
+            label: 'Widgets',
           ),
           NavigationDestination(
-            icon: Icon(Icons.edit),
+            icon: Icon(Icons.edit_outlined),
+            selectedIcon: Icon(Icons.edit),
             label: 'Track',
           ),
           NavigationDestination(
-            icon: Icon(Icons.analytics),
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
             label: 'Analytics',
           ),
         ],
