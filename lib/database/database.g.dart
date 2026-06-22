@@ -279,10 +279,7 @@ class $TrackingEventsTable extends TrackingEvents
   @override
   late final GeneratedColumn<int> widgetId = GeneratedColumn<int>(
       'widget_id', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: true,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('REFERENCES custom_widgets (id)'));
+      type: DriftSqlType.int, requiredDuringInsert: true);
   static const VerificationMeta _valueMeta = const VerificationMeta('value');
   @override
   late final GeneratedColumn<String> value = GeneratedColumn<String>(
@@ -546,26 +543,6 @@ typedef $$CustomWidgetsTableUpdateCompanionBuilder = CustomWidgetsCompanion
   Value<DateTime> createdAt,
 });
 
-final class $$CustomWidgetsTableReferences
-    extends BaseReferences<_$AppDatabase, $CustomWidgetsTable, CustomWidget> {
-  $$CustomWidgetsTableReferences(
-      super.$_db, super.$_table, super.$_typedResult);
-
-  static MultiTypedResultKey<$TrackingEventsTable, List<TrackingEvent>>
-      _trackingEventsRefsTable(_$AppDatabase db) =>
-          MultiTypedResultKey.fromTable(db.trackingEvents,
-              aliasName: 'custom_widgets__id__tracking_events__widget_id');
-
-  $$TrackingEventsTableProcessedTableManager get trackingEventsRefs {
-    final manager = $$TrackingEventsTableTableManager($_db, $_db.trackingEvents)
-        .filter((f) => f.widgetId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_trackingEventsRefsTable($_db));
-    return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: cache));
-  }
-}
-
 class $$CustomWidgetsTableFilterComposer
     extends Composer<_$AppDatabase, $CustomWidgetsTable> {
   $$CustomWidgetsTableFilterComposer({
@@ -586,27 +563,6 @@ class $$CustomWidgetsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
-
-  Expression<bool> trackingEventsRefs(
-      Expression<bool> Function($$TrackingEventsTableFilterComposer f) f) {
-    final $$TrackingEventsTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.trackingEvents,
-        getReferencedColumn: (t) => t.widgetId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$TrackingEventsTableFilterComposer(
-              $db: $db,
-              $table: $db.trackingEvents,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return f(composer);
-  }
 }
 
 class $$CustomWidgetsTableOrderingComposer
@@ -651,27 +607,6 @@ class $$CustomWidgetsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  Expression<T> trackingEventsRefs<T extends Object>(
-      Expression<T> Function($$TrackingEventsTableAnnotationComposer a) f) {
-    final $$TrackingEventsTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.trackingEvents,
-        getReferencedColumn: (t) => t.widgetId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$TrackingEventsTableAnnotationComposer(
-              $db: $db,
-              $table: $db.trackingEvents,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return f(composer);
-  }
 }
 
 class $$CustomWidgetsTableTableManager extends RootTableManager<
@@ -683,9 +618,12 @@ class $$CustomWidgetsTableTableManager extends RootTableManager<
     $$CustomWidgetsTableAnnotationComposer,
     $$CustomWidgetsTableCreateCompanionBuilder,
     $$CustomWidgetsTableUpdateCompanionBuilder,
-    (CustomWidget, $$CustomWidgetsTableReferences),
+    (
+      CustomWidget,
+      BaseReferences<_$AppDatabase, $CustomWidgetsTable, CustomWidget>
+    ),
     CustomWidget,
-    PrefetchHooks Function({bool trackingEventsRefs})> {
+    PrefetchHooks Function()> {
   $$CustomWidgetsTableTableManager(_$AppDatabase db, $CustomWidgetsTable table)
       : super(TableManagerState(
           db: db,
@@ -721,37 +659,9 @@ class $$CustomWidgetsTableTableManager extends RootTableManager<
             createdAt: createdAt,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable(table),
-                    $$CustomWidgetsTableReferences(db, table, e)
-                  ))
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: ({trackingEventsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [
-                if (trackingEventsRefs) db.trackingEvents
-              ],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (trackingEventsRefs)
-                    await $_getPrefetchedData<CustomWidget, $CustomWidgetsTable,
-                            TrackingEvent>(
-                        currentTable: table,
-                        referencedTable: $$CustomWidgetsTableReferences
-                            ._trackingEventsRefsTable(db),
-                        managerFromTypedResult: (p0) =>
-                            $$CustomWidgetsTableReferences(db, table, p0)
-                                .trackingEventsRefs,
-                        referencedItemsForCurrentItem: (item,
-                                referencedItems) =>
-                            referencedItems.where((e) => e.widgetId == item.id),
-                        typedResults: items)
-                ];
-              },
-            );
-          },
+          prefetchHooksCallback: null,
         ));
 }
 
@@ -764,9 +674,12 @@ typedef $$CustomWidgetsTableProcessedTableManager = ProcessedTableManager<
     $$CustomWidgetsTableAnnotationComposer,
     $$CustomWidgetsTableCreateCompanionBuilder,
     $$CustomWidgetsTableUpdateCompanionBuilder,
-    (CustomWidget, $$CustomWidgetsTableReferences),
+    (
+      CustomWidget,
+      BaseReferences<_$AppDatabase, $CustomWidgetsTable, CustomWidget>
+    ),
     CustomWidget,
-    PrefetchHooks Function({bool trackingEventsRefs})>;
+    PrefetchHooks Function()>;
 typedef $$TrackingEventsTableCreateCompanionBuilder = TrackingEventsCompanion
     Function({
   Value<int> id,
@@ -782,27 +695,6 @@ typedef $$TrackingEventsTableUpdateCompanionBuilder = TrackingEventsCompanion
   Value<DateTime> timestamp,
 });
 
-final class $$TrackingEventsTableReferences
-    extends BaseReferences<_$AppDatabase, $TrackingEventsTable, TrackingEvent> {
-  $$TrackingEventsTableReferences(
-      super.$_db, super.$_table, super.$_typedResult);
-
-  static $CustomWidgetsTable _widgetIdTable(_$AppDatabase db) =>
-      db.customWidgets
-          .createAlias('tracking_events__widget_id__custom_widgets__id');
-
-  $$CustomWidgetsTableProcessedTableManager get widgetId {
-    final $_column = $_itemColumn<int>('widget_id')!;
-
-    final manager = $$CustomWidgetsTableTableManager($_db, $_db.customWidgets)
-        .filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_widgetIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: [item]));
-  }
-}
-
 class $$TrackingEventsTableFilterComposer
     extends Composer<_$AppDatabase, $TrackingEventsTable> {
   $$TrackingEventsTableFilterComposer({
@@ -815,31 +707,14 @@ class $$TrackingEventsTableFilterComposer
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<int> get widgetId => $composableBuilder(
+      column: $table.widgetId, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get value => $composableBuilder(
       column: $table.value, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get timestamp => $composableBuilder(
       column: $table.timestamp, builder: (column) => ColumnFilters(column));
-
-  $$CustomWidgetsTableFilterComposer get widgetId {
-    final $$CustomWidgetsTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.widgetId,
-        referencedTable: $db.customWidgets,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomWidgetsTableFilterComposer(
-              $db: $db,
-              $table: $db.customWidgets,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$TrackingEventsTableOrderingComposer
@@ -854,31 +729,14 @@ class $$TrackingEventsTableOrderingComposer
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get widgetId => $composableBuilder(
+      column: $table.widgetId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get value => $composableBuilder(
       column: $table.value, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<DateTime> get timestamp => $composableBuilder(
       column: $table.timestamp, builder: (column) => ColumnOrderings(column));
-
-  $$CustomWidgetsTableOrderingComposer get widgetId {
-    final $$CustomWidgetsTableOrderingComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.widgetId,
-        referencedTable: $db.customWidgets,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomWidgetsTableOrderingComposer(
-              $db: $db,
-              $table: $db.customWidgets,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$TrackingEventsTableAnnotationComposer
@@ -893,31 +751,14 @@ class $$TrackingEventsTableAnnotationComposer
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
+  GeneratedColumn<int> get widgetId =>
+      $composableBuilder(column: $table.widgetId, builder: (column) => column);
+
   GeneratedColumn<String> get value =>
       $composableBuilder(column: $table.value, builder: (column) => column);
 
   GeneratedColumn<DateTime> get timestamp =>
       $composableBuilder(column: $table.timestamp, builder: (column) => column);
-
-  $$CustomWidgetsTableAnnotationComposer get widgetId {
-    final $$CustomWidgetsTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.widgetId,
-        referencedTable: $db.customWidgets,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$CustomWidgetsTableAnnotationComposer(
-              $db: $db,
-              $table: $db.customWidgets,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
-    return composer;
-  }
 }
 
 class $$TrackingEventsTableTableManager extends RootTableManager<
@@ -929,9 +770,12 @@ class $$TrackingEventsTableTableManager extends RootTableManager<
     $$TrackingEventsTableAnnotationComposer,
     $$TrackingEventsTableCreateCompanionBuilder,
     $$TrackingEventsTableUpdateCompanionBuilder,
-    (TrackingEvent, $$TrackingEventsTableReferences),
+    (
+      TrackingEvent,
+      BaseReferences<_$AppDatabase, $TrackingEventsTable, TrackingEvent>
+    ),
     TrackingEvent,
-    PrefetchHooks Function({bool widgetId})> {
+    PrefetchHooks Function()> {
   $$TrackingEventsTableTableManager(
       _$AppDatabase db, $TrackingEventsTable table)
       : super(TableManagerState(
@@ -968,46 +812,9 @@ class $$TrackingEventsTableTableManager extends RootTableManager<
             timestamp: timestamp,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable(table),
-                    $$TrackingEventsTableReferences(db, table, e)
-                  ))
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: ({widgetId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins: <
-                  T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic>>(state) {
-                if (widgetId) {
-                  state = state.withJoin(
-                    currentTable: table,
-                    currentColumn: table.widgetId,
-                    referencedTable:
-                        $$TrackingEventsTableReferences._widgetIdTable(db),
-                    referencedColumn:
-                        $$TrackingEventsTableReferences._widgetIdTable(db).id,
-                  ) as T;
-                }
-
-                return state;
-              },
-              getPrefetchedDataCallback: (items) async {
-                return [];
-              },
-            );
-          },
+          prefetchHooksCallback: null,
         ));
 }
 
@@ -1020,9 +827,12 @@ typedef $$TrackingEventsTableProcessedTableManager = ProcessedTableManager<
     $$TrackingEventsTableAnnotationComposer,
     $$TrackingEventsTableCreateCompanionBuilder,
     $$TrackingEventsTableUpdateCompanionBuilder,
-    (TrackingEvent, $$TrackingEventsTableReferences),
+    (
+      TrackingEvent,
+      BaseReferences<_$AppDatabase, $TrackingEventsTable, TrackingEvent>
+    ),
     TrackingEvent,
-    PrefetchHooks Function({bool widgetId})>;
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;

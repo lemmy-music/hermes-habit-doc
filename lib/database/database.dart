@@ -1,9 +1,6 @@
-import 'dart:io';
+// ignore_for_file: unnecessary_import
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:drift_flutter/drift_flutter.dart';
 
 part 'database.g.dart';
 
@@ -25,12 +22,29 @@ class TrackingEvents extends Table {
 
 // ─── Database ────────────────────────────────────────────────────────────────
 
+/// Web-compatible Drift database.
+///
+/// Uses [drift_flutter]'s [driftDatabase] which automatically selects:
+/// - Native platforms (Android, iOS, macOS, Windows, Linux): sqlite3 file-based DB
+/// - Web platform: IndexedDB-backed storage (no dart:ffi, no WASM required for
+///   basic support — completely safe in the browser)
 @DriftDatabase(tables: [CustomWidgets, TrackingEvents])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
   int get schemaVersion => 1;
+
+  // ── Connection factory ────────────────────────────────────────────────────
+
+  /// Platform-aware connection factory.
+  ///
+  /// [driftDatabase] from package:drift_flutter handles web vs. native:
+  ///   - On native: opens a sqlite3 file in the documents directory.
+  ///   - On web:    uses IndexedDB storage (no dart:ffi, no dart:io).
+  static QueryExecutor _openConnection() {
+    return driftDatabase(name: 'habit_doc_db');
+  }
 
   // ── CustomWidgets CRUD ────────────────────────────────────────────────────
 
@@ -43,6 +57,9 @@ class AppDatabase extends _$AppDatabase {
       (select(customWidgets)
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .watch();
+
+  Future<CustomWidget?> getWidgetById(int id) =>
+      (select(customWidgets)..where((t) => t.id.equals(id))).getSingleOrNull();
 
   Future<int> insertWidget(CustomWidgetsCompanion widget) =>
       into(customWidgets).insert(widget);
@@ -61,20 +78,18 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.desc(t.timestamp)]))
           .get();
 
+  Stream<List<TrackingEvent>> watchEventsForWidget(int widgetId) =>
+      (select(trackingEvents)
+            ..where((t) => t.widgetId.equals(widgetId))
+            ..orderBy([(t) => OrderingTerm.desc(t.timestamp)]))
+          .watch();
+
   Future<int> insertEvent(TrackingEventsCompanion event) =>
       into(trackingEvents).insert(event);
-}
 
-// ─── Connection factory ───────────────────────────────────────────────────────
+  Future<int> deleteEvent(int id) =>
+      (delete(trackingEvents)..where((t) => t.id.equals(id))).go();
 
-QueryExecutor _openConnection() {
-  if (kIsWeb) {
-    // Web: in-memory SQLite (no persistence yet — add drift_flutter_libs for web)
-    return NativeDatabase.memory();
-  }
-  return LazyDatabase(() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'habit_doc.db'));
-    return NativeDatabase(file);
-  });
+  Future<int> clearEventsForWidget(int widgetId) =>
+      (delete(trackingEvents)..where((t) => t.widgetId.equals(widgetId))).go();
 }
