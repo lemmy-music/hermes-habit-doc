@@ -16,9 +16,9 @@ dependencies:
   # State Management
   provider: ^6.0.0
   
-  # Database
+  # Database – web-safe via drift_flutter (no dart:ffi on web)
   drift: ^2.14.0
-  sqlite3_flutter_libs: ^0.5.0
+  drift_flutter: ^0.2.0
   path_provider: ^2.1.0
   path: ^1.8.0
   
@@ -41,6 +41,4 @@ flutter:
   assets:
     - assets/
 
-web:
-  # Workaround for https://github.com/google/app-engine-plugins/issues/123
-  generate: true
+
