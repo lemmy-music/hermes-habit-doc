@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../database/database.dart';
+import '../providers/theme_provider.dart';
 import '../providers/widget_manager_provider.dart';
+import '../services/data_port_service.dart';
 
 // ─── HomeScreen (Widget-Manager) ─────────────────────────────────────────────
 
@@ -22,11 +24,33 @@ class _WidgetManagerView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.effectivelyDark(
+        MediaQuery.of(context).platformBrightness);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Widget Manager'),
         centerTitle: true,
         actions: [
+          // Dark-mode toggle
+          IconButton(
+            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+            tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            onPressed: () => themeProvider.toggleTheme(),
+          ),
+          // Export button
+          IconButton(
+            icon: const Icon(Icons.upload_file),
+            tooltip: 'Export Data (JSON)',
+            onPressed: () => _exportData(context),
+          ),
+          // Import button
+          IconButton(
+            icon: const Icon(Icons.download_for_offline),
+            tooltip: 'Import Data (JSON)',
+            onPressed: () => _importData(context),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -45,16 +69,196 @@ class _WidgetManagerView extends StatelessWidget {
   }
 
   Future<void> _showCreateDialog(BuildContext context) async {
-    // Capture the provider reference BEFORE await
     final provider = context.read<WidgetManagerProvider>();
     await showDialog<void>(
       context: context,
-      builder: (ctx) => _WidgetFormDialog(
-        provider: provider,
+      builder: (ctx) => _WidgetFormDialog(provider: provider),
+    );
+  }
+
+  // ─── Export ──────────────────────────────────────────────────────────────
+
+  Future<void> _exportData(BuildContext context) async {
+    final db = context.read<AppDatabase>();
+    final service = DataPortService(db);
+
+    // Show loading indicator.
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white)),
+            SizedBox(width: 12),
+            Text('Exporting…'),
+          ],
+        ),
+        duration: Duration(seconds: 60),
+      ),
+    );
+
+    final error = await service.exportData();
+    messenger.hideCurrentSnackBar();
+
+    if (error != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('❌ $error'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('✅ Export complete!'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // ─── Import ──────────────────────────────────────────────────────────────
+
+  Future<void> _importData(BuildContext context) async {
+    final db = context.read<AppDatabase>();
+    final provider = context.read<WidgetManagerProvider>();
+    final service = DataPortService(db);
+
+    // 1. Pick & parse file.
+    Map<String, dynamic>? parsed;
+    try {
+      parsed = await service.pickAndParseJson();
+    } on FormatException catch (e) {
+      if (context.mounted) {
+        _showErrorDialog(context, 'Invalid file', e.message);
+      }
+      return;
+    } catch (e) {
+      if (context.mounted) {
+        _showErrorDialog(context, 'Error', e.toString());
+      }
+      return;
+    }
+
+    if (parsed == null) return; // user cancelled
+
+    // 2. Ask overwrite or merge.
+    if (!context.mounted) return;
+    final choice = await _showImportModeDialog(context);
+    if (choice == null) return; // cancelled
+
+    final overwrite = choice == _ImportMode.overwrite;
+
+    // 3. Confirm if overwriting.
+    if (overwrite && context.mounted) {
+      final confirmed = await _showOverwriteConfirm(context);
+      if (confirmed != true) return;
+    }
+
+    // 4. Run import.
+    if (!context.mounted) return;
+    final result = await service.importData(parsed, overwrite: overwrite);
+
+    if (!context.mounted) return;
+    if (result.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✅ Imported ${result.widgetsAdded} widget(s) '
+            'and ${result.eventsAdded} event(s).',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      await provider.refresh();
+    } else {
+      _showErrorDialog(context, 'Import failed', result.error ?? 'Unknown error');
+    }
+  }
+
+  void _showErrorDialog(BuildContext context, String title, String message) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.error_outline, color: Colors.red, size: 40),
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<_ImportMode?> _showImportModeDialog(BuildContext context) {
+    return showDialog<_ImportMode>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import Mode'),
+        content: const Text(
+          'How should the imported data be handled?\n\n'
+          '• Add (Merge): keeps existing data and adds new entries.\n'
+          '• Overwrite: deletes ALL current data before importing.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, _ImportMode.merge),
+            child: const Text('Add (Merge)'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, _ImportMode.overwrite),
+            child: const Text('Overwrite'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _showOverwriteConfirm(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded,
+            color: Colors.orange, size: 40),
+        title: const Text('Delete all data?'),
+        content: const Text(
+          'This will permanently delete ALL your current habits and events '
+          'before importing. This action cannot be undone.\n\n'
+          'Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete & Import'),
+          ),
+        ],
       ),
     );
   }
 }
+
+enum _ImportMode { merge, overwrite }
 
 // ─── Widget List ─────────────────────────────────────────────────────────────
 

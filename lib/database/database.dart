@@ -101,4 +101,9 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> clearEventsForWidget(int widgetId) =>
       (delete(trackingEvents)..where((t) => t.widgetId.equals(widgetId))).go();
+
+  Future<List<TrackingEvent>> getAllEvents() =>
+      (select(trackingEvents)
+            ..orderBy([(t) => OrderingTerm.desc(t.timestamp)]))
+          .get();
 }

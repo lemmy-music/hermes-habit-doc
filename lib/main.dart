@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'database/database.dart';
+import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/tracking_screen.dart';
 import 'screens/analytics_screen.dart';
@@ -8,36 +9,49 @@ import 'screens/analytics_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final database = AppDatabase();
-  runApp(MyApp(database: database));
+  final themeProvider = ThemeProvider();
+  await themeProvider.load();
+  runApp(MyApp(database: database, themeProvider: themeProvider));
 }
 
 class MyApp extends StatelessWidget {
   final AppDatabase database;
+  final ThemeProvider themeProvider;
 
-  const MyApp({Key? key, required this.database}) : super(key: key);
+  const MyApp({
+    Key? key,
+    required this.database,
+    required this.themeProvider,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Provider<AppDatabase>.value(
-      value: database,
-      child: MaterialApp(
-        title: 'Habit Doc',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.light,
+    return MultiProvider(
+      providers: [
+        Provider<AppDatabase>.value(value: database),
+        ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (_, theme, __) => MaterialApp(
+          title: 'Habit Doc',
+          debugShowCheckedModeBanner: false,
+          themeMode: theme.themeMode,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: Brightness.light,
+            ),
+            useMaterial3: true,
           ),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.dark,
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
           ),
-          useMaterial3: true,
+          home: const MainNavigation(),
         ),
-        home: const MainNavigation(),
       ),
     );
   }
