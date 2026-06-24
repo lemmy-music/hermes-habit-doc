@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import '../database/database.dart';
@@ -12,6 +13,13 @@ class WidgetTrackingState {
   double sliderValue;
   bool checkboxValue;
 
+  // Duration: stored as hours + minutes
+  int durationHours;
+  int durationMinutes;
+
+  // Time: stored as "HH:mm" string
+  String timeValue; // e.g. "08:30"
+
   // Timestamp for the event (defaults to now, user-editable for backlogging)
   DateTime selectedTimestamp;
 
@@ -24,6 +32,9 @@ class WidgetTrackingState {
     this.numberValue = '',
     this.sliderValue = 50.0,
     this.checkboxValue = false,
+    this.durationHours = 0,
+    this.durationMinutes = 0,
+    this.timeValue = '',
     DateTime? selectedTimestamp,
     this.saving = false,
     this.error,
@@ -39,6 +50,12 @@ class WidgetTrackingState {
         return sliderValue.toStringAsFixed(1);
       case FieldType.checkbox:
         return checkboxValue ? 'true' : 'false';
+      case FieldType.duration:
+        // Store as JSON {"hours": int, "minutes": int}
+        return jsonEncode({'hours': durationHours, 'minutes': durationMinutes});
+      case FieldType.time:
+        // Store as "HH:mm"
+        return timeValue.isNotEmpty ? timeValue : '00:00';
     }
   }
 
@@ -47,6 +64,9 @@ class WidgetTrackingState {
     numberValue = '';
     sliderValue = 50.0;
     checkboxValue = false;
+    durationHours = 0;
+    durationMinutes = 0;
+    timeValue = '';
     selectedTimestamp = DateTime.now();
     saving = false;
     error = null;
@@ -56,6 +76,9 @@ class WidgetTrackingState {
     String? numberValue,
     double? sliderValue,
     bool? checkboxValue,
+    int? durationHours,
+    int? durationMinutes,
+    String? timeValue,
     DateTime? selectedTimestamp,
     bool? saving,
     String? error,
@@ -66,6 +89,9 @@ class WidgetTrackingState {
       numberValue: numberValue ?? this.numberValue,
       sliderValue: sliderValue ?? this.sliderValue,
       checkboxValue: checkboxValue ?? this.checkboxValue,
+      durationHours: durationHours ?? this.durationHours,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      timeValue: timeValue ?? this.timeValue,
       selectedTimestamp: selectedTimestamp ?? this.selectedTimestamp,
       saving: saving ?? this.saving,
       error: clearError ? null : (error ?? this.error),
@@ -142,14 +168,51 @@ class TrackingProvider extends ChangeNotifier {
   void setCheckboxValue(int widgetId, bool value) {
     final state = _formStates[widgetId];
     if (state == null) return;
-    _formStates[widgetId] = state.copyWith(checkboxValue: value, clearError: true);
+    _formStates[widgetId] =
+        state.copyWith(checkboxValue: value, clearError: true);
+    notifyListeners();
+  }
+
+  void setDurationHours(int widgetId, int hours) {
+    final state = _formStates[widgetId];
+    if (state == null) return;
+    _formStates[widgetId] =
+        state.copyWith(durationHours: hours, clearError: true);
+    notifyListeners();
+  }
+
+  void setDurationMinutes(int widgetId, int minutes) {
+    final state = _formStates[widgetId];
+    if (state == null) return;
+    _formStates[widgetId] =
+        state.copyWith(durationMinutes: minutes, clearError: true);
+    notifyListeners();
+  }
+
+  /// Sets a time value (HH:mm) and auto-updates the timestamp to today at that time.
+  void setTimeValue(int widgetId, String hhmm) {
+    final state = _formStates[widgetId];
+    if (state == null) return;
+    // Auto-set timestamp to today at the given time
+    final parts = hhmm.split(':');
+    final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
+    final minute = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+    final now = DateTime.now();
+    final autoTimestamp =
+        DateTime(now.year, now.month, now.day, hour, minute);
+    _formStates[widgetId] = state.copyWith(
+      timeValue: hhmm,
+      selectedTimestamp: autoTimestamp,
+      clearError: true,
+    );
     notifyListeners();
   }
 
   void setTimestamp(int widgetId, DateTime dt) {
     final state = _formStates[widgetId];
     if (state == null) return;
-    _formStates[widgetId] = state.copyWith(selectedTimestamp: dt, clearError: true);
+    _formStates[widgetId] =
+        state.copyWith(selectedTimestamp: dt, clearError: true);
     notifyListeners();
   }
 
@@ -159,12 +222,18 @@ class TrackingProvider extends ChangeNotifier {
     final state = _formStates[widgetId];
     if (state == null) return 'Widget not found';
 
-    // Validate number input
     final fieldType = FieldType.fromDb(state.widget.fieldType);
+
+    // Validate number input
     if (fieldType == FieldType.number) {
       final raw = state.numberValue.trim();
       if (raw.isEmpty) return 'Please enter a value';
       if (double.tryParse(raw) == null) return 'Value must be a number';
+    }
+
+    // Validate time input
+    if (fieldType == FieldType.time && state.timeValue.isEmpty) {
+      return 'Please select a time';
     }
 
     // Mark as saving

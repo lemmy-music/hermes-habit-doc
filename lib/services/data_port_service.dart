@@ -3,6 +3,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import '../database/database.dart';
+import 'download_helper.dart';
 
 /// Result of an import operation.
 class ImportResult {
@@ -56,8 +57,8 @@ class DataPortService {
 
   /// Exports data as JSON.
   ///
-  /// On **web**: file_picker.saveFile with bytes triggers a browser download.
-  /// On **native**: opens a save-file dialog.
+  /// On **web**: triggers a browser download via a hidden anchor element.
+  /// On **native**: opens a save-file dialog via file_picker.
   ///
   /// Returns null on success, an error string on failure.
   Future<String?> exportData() async {
@@ -68,6 +69,13 @@ class DataPortService {
       final filename =
           'habit_doc_export_${DateTime.now().millisecondsSinceEpoch}.json';
 
+      if (kIsWeb) {
+        // Web: use dart:html anchor download trick
+        triggerWebDownload(filename, bytes);
+        return null; // success
+      }
+
+      // Native: open save-file dialog
       final path = await FilePicker.platform.saveFile(
         dialogTitle: 'Save Habit Doc Export',
         fileName: filename,
@@ -76,9 +84,7 @@ class DataPortService {
         bytes: bytes,
       );
 
-      // On web, file_picker downloads and returns null (no path).
-      // On native, null means the user cancelled the dialog.
-      if (!kIsWeb && path == null) {
+      if (path == null) {
         return 'Export cancelled by user.';
       }
 

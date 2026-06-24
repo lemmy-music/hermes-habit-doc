@@ -93,7 +93,9 @@ class _TrackingView extends StatelessWidget {
       builder: (ctx, constraints) {
         final isWide = constraints.maxWidth >= 600;
         if (isWide) {
-          return _TrackingGrid(widgets: provider.widgets, columns: constraints.maxWidth >= 900 ? 3 : 2);
+          return _TrackingGrid(
+              widgets: provider.widgets,
+              columns: constraints.maxWidth >= 900 ? 3 : 2);
         }
         return _TrackingList(widgets: provider.widgets);
       },
@@ -117,7 +119,7 @@ class _TrackingGrid extends StatelessWidget {
         crossAxisCount: columns,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 0.78,
+        childAspectRatio: 0.72,
       ),
       itemCount: widgets.length,
       itemBuilder: (ctx, i) => _TrackingCard(widget: widgets[i]),
@@ -157,31 +159,28 @@ class _TrackingCard extends StatefulWidget {
 class _TrackingCardState extends State<_TrackingCard> {
   final _formKey = GlobalKey<FormState>();
   final _numberController = TextEditingController();
+  final _hoursController = TextEditingController();
+  final _minutesController = TextEditingController();
 
   @override
   void dispose() {
     _numberController.dispose();
+    _hoursController.dispose();
+    _minutesController.dispose();
     super.dispose();
   }
 
-  IconData _iconForType(String type) {
-    switch (type) {
-      case 'slider':
-        return Icons.linear_scale;
-      case 'checkbox':
-        return Icons.check_box_outlined;
-      default:
-        return Icons.pin_outlined;
-    }
-  }
-
-  Color _colorForType(BuildContext context, String type) {
+  Color _colorForType(BuildContext context, FieldType ft) {
     final cs = Theme.of(context).colorScheme;
-    switch (type) {
-      case 'slider':
+    switch (ft) {
+      case FieldType.slider:
         return cs.tertiary;
-      case 'checkbox':
+      case FieldType.checkbox:
         return cs.secondary;
+      case FieldType.duration:
+        return cs.primaryContainer.withValues(alpha: 1.0);
+      case FieldType.time:
+        return cs.tertiaryContainer.withValues(alpha: 1.0);
       default:
         return cs.primary;
     }
@@ -194,8 +193,11 @@ class _TrackingCardState extends State<_TrackingCard> {
     if (state == null) return const SizedBox.shrink();
 
     final fieldType = FieldType.fromDb(widget.widget.fieldType);
-    final accentColor = _colorForType(context, widget.widget.fieldType);
+    final accentColor = _colorForType(context, fieldType);
     final cs = Theme.of(context).colorScheme;
+
+    // For time type, we don't show the timestamp picker (auto-set)
+    final showTimestampPicker = fieldType != FieldType.time;
 
     return Card(
       elevation: 2,
@@ -214,41 +216,25 @@ class _TrackingCardState extends State<_TrackingCard> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.12),
+                      color: cs.primaryContainer.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      _iconForType(widget.widget.fieldType),
-                      color: accentColor,
+                      fieldType.icon,
+                      color: cs.primary,
                       size: 22,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.widget.name,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Chip(
-                          padding: EdgeInsets.zero,
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                          label: Text(
-                            fieldType.label,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          backgroundColor: cs.secondaryContainer,
-                          side: BorderSide.none,
-                        ),
-                      ],
+                    child: Text(
+                      widget.widget.name,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -263,14 +249,38 @@ class _TrackingCardState extends State<_TrackingCard> {
 
               const SizedBox(height: 16),
 
-              // ── Timestamp Picker ─────────────────────────────────────────
-              _TimestampPicker(
-                timestamp: state.selectedTimestamp,
-                onChanged: (dt) =>
-                    context.read<TrackingProvider>().setTimestamp(widget.widget.id, dt),
-              ),
-
-              const SizedBox(height: 16),
+              // ── Timestamp Picker (not shown for time type) ───────────────
+              if (showTimestampPicker) ...[
+                _TimestampPicker(
+                  timestamp: state.selectedTimestamp,
+                  onChanged: (dt) =>
+                      context.read<TrackingProvider>().setTimestamp(widget.widget.id, dt),
+                ),
+                const SizedBox(height: 16),
+              ] else ...[
+                // For time type, show auto-set timestamp info
+                Container(
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.schedule, size: 18, color: cs.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Timestamp: today at ${state.timeValue.isNotEmpty ? state.timeValue : "--:--"}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // ── Error message ────────────────────────────────────────────
               if (state.error != null) ...[
@@ -282,7 +292,8 @@ class _TrackingCardState extends State<_TrackingCard> {
                   ),
                   child: Text(
                     state.error!,
-                    style: TextStyle(color: cs.onErrorContainer, fontSize: 12),
+                    style:
+                        TextStyle(color: cs.onErrorContainer, fontSize: 12),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -328,12 +339,14 @@ class _TrackingCardState extends State<_TrackingCard> {
         if (_numberController.text != state.numberValue) {
           _numberController.value = _numberController.value.copyWith(
             text: state.numberValue,
-            selection: TextSelection.collapsed(offset: state.numberValue.length),
+            selection:
+                TextSelection.collapsed(offset: state.numberValue.length),
           );
         }
         return TextFormField(
           controller: _numberController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true, signed: true),
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[-0-9.]')),
           ],
@@ -369,7 +382,8 @@ class _TrackingCardState extends State<_TrackingCard> {
               children: [
                 Text('Value', style: Theme.of(context).textTheme.bodyMedium),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(8),
@@ -378,7 +392,9 @@ class _TrackingCardState extends State<_TrackingCard> {
                     state.sliderValue.toStringAsFixed(0),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onTertiaryContainer,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onTertiaryContainer,
                         ),
                   ),
                 ),
@@ -407,12 +423,30 @@ class _TrackingCardState extends State<_TrackingCard> {
       case FieldType.checkbox:
         return CheckboxListTile(
           value: state.checkboxValue,
-          onChanged: (v) => provider.setCheckboxValue(widgetId, v ?? false),
+          onChanged: (v) =>
+              provider.setCheckboxValue(widgetId, v ?? false),
           title: Text(state.checkboxValue ? 'Yes / Done' : 'No / Not done'),
           subtitle: const Text('Tap to toggle'),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           tileColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        );
+
+      case FieldType.duration:
+        return _DurationInput(
+          hours: state.durationHours,
+          minutes: state.durationMinutes,
+          hoursController: _hoursController,
+          minutesController: _minutesController,
+          onHoursChanged: (h) => provider.setDurationHours(widgetId, h),
+          onMinutesChanged: (m) => provider.setDurationMinutes(widgetId, m),
+        );
+
+      case FieldType.time:
+        return _TimeInput(
+          value: state.timeValue,
+          onChanged: (hhmm) => provider.setTimeValue(widgetId, hhmm),
         );
     }
   }
@@ -430,8 +464,10 @@ class _TrackingCardState extends State<_TrackingCard> {
     if (!mounted) return;
 
     if (error == null) {
-      // Reset number controller to match provider reset
+      // Reset controllers to match provider reset
       _numberController.clear();
+      _hoursController.clear();
+      _minutesController.clear();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -455,6 +491,174 @@ class _TrackingCardState extends State<_TrackingCard> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+    }
+  }
+}
+
+// ─── Duration Input ───────────────────────────────────────────────────────────
+
+class _DurationInput extends StatelessWidget {
+  const _DurationInput({
+    required this.hours,
+    required this.minutes,
+    required this.hoursController,
+    required this.minutesController,
+    required this.onHoursChanged,
+    required this.onMinutesChanged,
+  });
+
+  final int hours;
+  final int minutes;
+  final TextEditingController hoursController;
+  final TextEditingController minutesController;
+  final ValueChanged<int> onHoursChanged;
+  final ValueChanged<int> onMinutesChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    // Keep controllers in sync with state
+    final hText = hours > 0 ? hours.toString() : '';
+    if (hoursController.text != hText) {
+      hoursController.value = hoursController.value.copyWith(
+        text: hText,
+        selection: TextSelection.collapsed(offset: hText.length),
+      );
+    }
+    final mText = minutes > 0 ? minutes.toString() : '';
+    if (minutesController.text != mText) {
+      minutesController.value = minutesController.value.copyWith(
+        text: mText,
+        selection: TextSelection.collapsed(offset: mText.length),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Duration',
+            style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: hoursController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Hours',
+                  hintText: '0',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.hourglass_empty),
+                ),
+                onChanged: (v) {
+                  final val = int.tryParse(v) ?? 0;
+                  onHoursChanged(val);
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: minutesController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Minutes',
+                  hintText: '0',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.timer_outlined),
+                ),
+                onChanged: (v) {
+                  var val = int.tryParse(v) ?? 0;
+                  if (val > 59) val = 59;
+                  onMinutesChanged(val);
+                },
+                validator: (v) {
+                  final val = int.tryParse(v ?? '') ?? 0;
+                  if (val < 0 || val > 59) return '0–59';
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+        if (hours > 0 || minutes > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            '= ${hours}h ${minutes}min',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ─── Time Input ───────────────────────────────────────────────────────────────
+
+class _TimeInput extends StatelessWidget {
+  const _TimeInput({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String value; // "HH:mm" or empty
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: () => _pickTime(context),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: cs.outline),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.access_time, color: cs.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value.isNotEmpty ? value : 'Select time…',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: value.isNotEmpty ? null : cs.outline,
+                    ),
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, color: cs.outline),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    TimeOfDay? initial;
+    if (value.isNotEmpty) {
+      final parts = value.split(':');
+      final h = int.tryParse(parts[0]) ?? 0;
+      final m = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+      initial = TimeOfDay(hour: h, minute: m);
+    }
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial ?? TimeOfDay.now(),
+      helpText: 'Select time',
+    );
+
+    if (picked != null) {
+      final hhmm =
+          '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+      onChanged(hhmm);
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' show sqrt;
 import 'package:flutter/foundation.dart';
 import '../database/database.dart';
@@ -92,7 +93,7 @@ class AnalyticsProvider extends ChangeNotifier {
 
   // ── Statistics ────────────────────────────────────────────────────────────
 
-  /// Parses an event value to double based on field type.
+  /// Parses an event value to double (in minutes for duration, minutes-since-midnight for time).
   double? _parseValue(TrackingEvent e, FieldType ft) {
     switch (ft) {
       case FieldType.number:
@@ -101,11 +102,29 @@ class AnalyticsProvider extends ChangeNotifier {
         return double.tryParse(e.value);
       case FieldType.checkbox:
         return e.value.toLowerCase() == 'true' ? 1.0 : 0.0;
+      case FieldType.duration:
+        // Parse {"hours": int, "minutes": int} → total minutes
+        try {
+          final map = jsonDecode(e.value) as Map<String, dynamic>;
+          final hours = (map['hours'] as num?)?.toInt() ?? 0;
+          final minutes = (map['minutes'] as num?)?.toInt() ?? 0;
+          return (hours * 60 + minutes).toDouble();
+        } catch (_) {
+          return null;
+        }
+      case FieldType.time:
+        // Parse "HH:mm" → minutes since midnight
+        final parts = e.value.split(':');
+        if (parts.length < 2) return null;
+        final h = int.tryParse(parts[0]) ?? 0;
+        final m = int.tryParse(parts[1]) ?? 0;
+        return (h * 60 + m).toDouble();
     }
   }
 
   /// Computes daily averages for a widget's events.
   /// Returns a map of "YYYY-MM-DD" → average value.
+  /// For duration: average total minutes. For time: average minutes-since-midnight.
   Map<String, double> dailyAverages(int widgetId) {
     final widget =
         _widgets.where((w) => w.id == widgetId).firstOrNull;

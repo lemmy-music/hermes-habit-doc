@@ -1,4 +1,5 @@
 import 'dart:math' show min, max;
+import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -154,11 +155,14 @@ class _EventTile extends StatelessWidget {
         return Icons.linear_scale;
       case 'checkbox':
         return Icons.check_box_outlined;
+      case 'duration':
+        return Icons.timer_outlined;
+      case 'time':
+        return Icons.access_time;
       default:
         return Icons.pin_outlined;
     }
   }
-
   String _formatValue(TrackingEvent event, String fieldType) {
     switch (fieldType) {
       case 'checkbox':
@@ -166,6 +170,17 @@ class _EventTile extends StatelessWidget {
       case 'slider':
         final v = double.tryParse(event.value);
         return v != null ? v.toStringAsFixed(1) : event.value;
+      case 'duration':
+        try {
+          final map = jsonDecode(event.value) as Map<String, dynamic>;
+          final h = (map['hours'] as num?)?.toInt() ?? 0;
+          final m = (map['minutes'] as num?)?.toInt() ?? 0;
+          return '${h}h ${m}min';
+        } catch (_) {
+          return event.value;
+        }
+      case 'time':
+        return event.value; // already "HH:mm"
       default:
         return event.value;
     }
@@ -368,6 +383,10 @@ class _WidgetChartCard extends StatelessWidget {
         return Icons.linear_scale;
       case 'checkbox':
         return Icons.check_box_outlined;
+      case 'duration':
+        return Icons.timer_outlined;
+      case 'time':
+        return Icons.access_time;
       default:
         return Icons.pin_outlined;
     }
@@ -432,10 +451,14 @@ class _WidgetChartCard extends StatelessWidget {
                 height: 200,
                 child: ft == FieldType.checkbox
                     ? _CheckboxChart(events: events)
-                    : _LineChartWidget(
-                        events: events,
-                        isSlider: ft == FieldType.slider,
-                      ),
+                    : ft == FieldType.duration
+                        ? _DurationChart(events: events)
+                        : ft == FieldType.time
+                            ? _TimeChart(events: events)
+                            : _LineChartWidget(
+                                events: events,
+                                isSlider: ft == FieldType.slider,
+                              ),
               ),
           ],
         ),
@@ -668,6 +691,287 @@ class _CheckboxChart extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─── Duration Chart (bar chart: total minutes per event) ─────────────────────
+
+class _DurationChart extends StatelessWidget {
+  const _DurationChart({required this.events});
+  final List<TrackingEvent> events;
+
+  int _toMinutes(String value) {
+    try {
+      final map = jsonDecode(value) as Map<String, dynamic>;
+      final h = (map['hours'] as num?)?.toInt() ?? 0;
+      final m = (map['minutes'] as num?)?.toInt() ?? 0;
+      return h * 60 + m;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  String _formatMinutes(double totalMinutes) {
+    final h = totalMinutes ~/ 60;
+    final m = totalMinutes.round() % 60;
+    if (h > 0) return '${h}h${m}m';
+    return '${m}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final sorted = [...events]
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    final spots = <FlSpot>[];
+    for (int i = 0; i < sorted.length; i++) {
+      spots.add(FlSpot(i.toDouble(), _toMinutes(sorted[i].value).toDouble()));
+    }
+
+    if (spots.isEmpty) return const Center(child: Text('No data'));
+
+    double maxY = spots.map((s) => s.y).reduce(max);
+    if (maxY == 0) maxY = 60;
+    maxY = maxY * 1.15;
+
+    final interval = (spots.length <= 7)
+        ? 1.0
+        : (spots.length / 5).ceilToDouble();
+
+    return LineChart(
+      LineChartData(
+        minX: 0,
+        maxX: spots.length <= 1 ? 1.0 : (spots.length - 1).toDouble(),
+        minY: 0,
+        maxY: maxY,
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: spots.length > 2,
+            color: cs.tertiary,
+            barWidth: 2,
+            belowBarData: BarAreaData(
+              show: true,
+              color: cs.tertiary.withAlpha(30),
+            ),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, bar, index) =>
+                  FlDotCirclePainter(
+                radius: spots.length <= 20 ? 4 : 2,
+                color: cs.tertiary,
+                strokeWidth: 1,
+                strokeColor: cs.surface,
+              ),
+            ),
+          ),
+        ],
+        titlesData: FlTitlesData(
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 48,
+              getTitlesWidget: (value, meta) {
+                if (value == meta.min || value == meta.max) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    _formatMinutes(value),
+                    style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.right,
+                  ),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              interval: interval,
+              reservedSize: 28,
+              getTitlesWidget: (value, meta) {
+                final idx = value.round();
+                if (idx < 0 || idx >= sorted.length) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    DateFormat('M/d').format(sorted[idx].timestamp),
+                    style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: cs.outlineVariant.withAlpha(80),
+            strokeWidth: 1,
+          ),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border(
+            bottom: BorderSide(color: cs.outlineVariant, width: 1),
+            left: BorderSide(color: cs.outlineVariant, width: 1),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Time Chart (line chart: minutes since midnight) ─────────────────────────
+
+class _TimeChart extends StatelessWidget {
+  const _TimeChart({required this.events});
+  final List<TrackingEvent> events;
+
+  int _toMinutesSinceMidnight(String value) {
+    final parts = value.split(':');
+    if (parts.length < 2) return 0;
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    return h * 60 + m;
+  }
+
+  String _minutesToHHmm(double minutes) {
+    final h = minutes ~/ 60;
+    final m = minutes.round() % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final sorted = [...events]
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    final spots = <FlSpot>[];
+    for (int i = 0; i < sorted.length; i++) {
+      spots.add(FlSpot(
+          i.toDouble(),
+          _toMinutesSinceMidnight(sorted[i].value).toDouble()));
+    }
+
+    if (spots.isEmpty) return const Center(child: Text('No data'));
+
+    double minY = spots.map((s) => s.y).reduce(min);
+    double maxY = spots.map((s) => s.y).reduce(max);
+    if (minY == maxY) {
+      minY = (minY - 30).clamp(0, 1439);
+      maxY = (maxY + 30).clamp(0, 1439);
+    } else {
+      final pad = (maxY - minY) * 0.12;
+      minY = (minY - pad).clamp(0, 1439);
+      maxY = (maxY + pad).clamp(0, 1439);
+    }
+
+    final interval = (spots.length <= 7)
+        ? 1.0
+        : (spots.length / 5).ceilToDouble();
+
+    return LineChart(
+      LineChartData(
+        minX: 0,
+        maxX: spots.length <= 1 ? 1.0 : (spots.length - 1).toDouble(),
+        minY: minY,
+        maxY: maxY,
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: spots.length > 2,
+            color: cs.secondary,
+            barWidth: 2,
+            belowBarData: BarAreaData(
+              show: true,
+              color: cs.secondary.withAlpha(30),
+            ),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, bar, index) =>
+                  FlDotCirclePainter(
+                radius: spots.length <= 20 ? 4 : 2,
+                color: cs.secondary,
+                strokeWidth: 1,
+                strokeColor: cs.surface,
+              ),
+            ),
+          ),
+        ],
+        titlesData: FlTitlesData(
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 42,
+              getTitlesWidget: (value, meta) {
+                if (value == meta.min || value == meta.max) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    _minutesToHHmm(value),
+                    style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.right,
+                  ),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              interval: interval,
+              reservedSize: 28,
+              getTitlesWidget: (value, meta) {
+                final idx = value.round();
+                if (idx < 0 || idx >= sorted.length) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    DateFormat('M/d').format(sorted[idx].timestamp),
+                    style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: cs.outlineVariant.withAlpha(80),
+            strokeWidth: 1,
+          ),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border(
+            bottom: BorderSide(color: cs.outlineVariant, width: 1),
+            left: BorderSide(color: cs.outlineVariant, width: 1),
+          ),
+        ),
+      ),
     );
   }
 }

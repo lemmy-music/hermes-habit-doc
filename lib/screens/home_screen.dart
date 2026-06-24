@@ -343,6 +343,10 @@ class _WidgetCard extends StatelessWidget {
         return Icons.linear_scale;
       case 'checkbox':
         return Icons.check_box_outlined;
+      case 'duration':
+        return Icons.timer_outlined;
+      case 'time':
+        return Icons.access_time;
       default:
         return Icons.pin_outlined;
     }
@@ -589,6 +593,10 @@ class _WidgetFormDialogState extends State<_WidgetFormDialog> {
         return Icons.linear_scale;
       case FieldType.checkbox:
         return Icons.check_box_outlined;
+      case FieldType.duration:
+        return Icons.timer_outlined;
+      case FieldType.time:
+        return Icons.access_time;
       default:
         return Icons.pin_outlined;
     }
