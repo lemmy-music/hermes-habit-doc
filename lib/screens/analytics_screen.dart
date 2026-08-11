@@ -1059,7 +1059,7 @@ class _CorrelationTabState extends State<_CorrelationTab> {
       for (int j = i + 1; j < widgets.length; j++) {
         if (provider.correlationBetween(
                 widgets[i].id, widgets[j].id,
-                minPoints: 5) !=
+                minPoints: kCorrelationMinPoints) !=
             null) {
           anyCorrelation = true;
           break;
@@ -1085,7 +1085,7 @@ class _CorrelationTabState extends State<_CorrelationTab> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Pearson correlation between widgets (requires ≥5 overlapping days). '
+                      'Pearson correlation between widgets (temporarily no min. days; final: ≥5 overlapping days). '
                       'Green = positive, Red = negative, Grey = insufficient data.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
@@ -1101,7 +1101,7 @@ class _CorrelationTabState extends State<_CorrelationTab> {
               icon: Icons.hourglass_empty,
               message: 'Not enough data for correlations.',
               subtitle:
-                  'Track at least 5 overlapping days across 2+ widgets.',
+                  'Track some overlapping days across 2+ widgets.',
             )
           else ...[
             // Heatmap Grid
@@ -1247,7 +1247,7 @@ class _CorrelationHeatmap extends StatelessWidget {
                     final result = provider.correlationBetween(
                       widgets[i].id,
                       widgets[j].id,
-                      minPoints: i == j ? 0 : 5,
+                      minPoints: i == j ? 0 : kCorrelationMinPoints,
                     );
                     final bgColor = _cellColor(result, cs);
                     final txtColor = _textColor(result, cs);
@@ -1355,7 +1355,8 @@ class _CorrelationDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final result =
-        provider.correlationBetween(widgetId1, widgetId2, minPoints: 5);
+        provider.correlationBetween(widgetId1, widgetId2,
+            minPoints: kCorrelationMinPoints);
     if (result == null) return const SizedBox.shrink();
 
     final w1 =

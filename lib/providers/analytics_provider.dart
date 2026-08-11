@@ -20,6 +20,12 @@ class CorrelationResult {
   const CorrelationResult({required this.value, required this.dataPoints});
 }
 
+/// Minimum overlapping days required for a meaningful Pearson correlation.
+///
+/// TODO(final): This limit should be 5 overlapping days once Daniel has real data.
+/// Temporarily set to 1 so the correlation feature can be tested immediately.
+const int kCorrelationMinPoints = 1;
+
 /// Provider for the Analytics screen.
 /// Loads all widgets + their events, exposes timeline, per-widget events,
 /// and computes Pearson correlations between numeric-valued widget pairs.
@@ -155,7 +161,7 @@ class AnalyticsProvider extends ChangeNotifier {
   CorrelationResult? correlationBetween(
     int widgetId1,
     int widgetId2, {
-    int minPoints = 5,
+    int minPoints = kCorrelationMinPoints,
   }) {
     if (widgetId1 == widgetId2) {
       return CorrelationResult(value: 1.0, dataPoints: -1);
