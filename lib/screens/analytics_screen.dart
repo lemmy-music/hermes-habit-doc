@@ -1053,6 +1053,10 @@ class _CorrelationTabState extends State<_CorrelationTab> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _resultsKey = GlobalKey();
 
+  /// Identifies the correlation detail card so it can be scrolled into view
+  /// after a heatmap cell tap.
+  final GlobalKey _detailKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -1125,10 +1129,18 @@ class _CorrelationTabState extends State<_CorrelationTab> {
 
   /// Scrolls the result area into view only when it sits outside the
   /// visible viewport (e.g. after data was tracked on another tab).
-  void _scrollToResultsIfNeeded() {
+  void _scrollToResultsIfNeeded() => _scrollToRevealIfNeeded(_resultsKey);
+
+  /// Scrolls the correlation detail card into view after a matrix cell tap,
+  /// but only when it sits outside the visible viewport.
+  void _scrollToDetailIfNeeded() => _scrollToRevealIfNeeded(_detailKey);
+
+  /// Brings the widget identified by [key] into view with a short animation,
+  /// but only when it is currently outside the visible viewport.
+  void _scrollToRevealIfNeeded(GlobalKey key) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final ctx = _resultsKey.currentContext;
+      final ctx = key.currentContext;
       if (ctx == null) return;
       final renderObject = ctx.findRenderObject();
       if (renderObject == null || !renderObject.attached) return;
@@ -1247,6 +1259,11 @@ class _CorrelationTabState extends State<_CorrelationTab> {
                                   _expandedWidgetId2 = id2;
                                 }
                               });
+                              // Bring the detail card into view (only if it
+                              // sits outside the viewport). When the tapped
+                              // cell was collapsed again the detail is gone
+                              // and this becomes a no-op.
+                              _scrollToDetailIfNeeded();
                             },
                           ),
                           if (_expandedWidgetId1 != null &&
@@ -1270,6 +1287,7 @@ class _CorrelationTabState extends State<_CorrelationTab> {
     if (result == null) return null;
 
     return _CorrelationDetail(
+      key: _detailKey,
       widgetId1: _expandedWidgetId1!,
       widgetId2: _expandedWidgetId2!,
       result: result,
@@ -1499,6 +1517,7 @@ class _LegendChip extends StatelessWidget {
 
 class _CorrelationDetail extends StatelessWidget {
   const _CorrelationDetail({
+    super.key,
     required this.widgetId1,
     required this.widgetId2,
     required this.result,
