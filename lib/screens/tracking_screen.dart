@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../database/database.dart';
-import '../providers/theme_provider.dart';
 import '../providers/tracking_provider.dart';
 import '../providers/widget_manager_provider.dart';
+import '../widgets/settings_button.dart';
 
 // ─── TrackingScreen ───────────────────────────────────────────────────────────
 
@@ -27,25 +27,20 @@ class _TrackingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TrackingProvider>();
-    final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.effectivelyDark(
-        MediaQuery.of(context).platformBrightness);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Track Events'),
         centerTitle: true,
         actions: [
-          // Dark-mode toggle
-          IconButton(
-            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-            tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-            onPressed: () => themeProvider.toggleTheme(),
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
             onPressed: () => context.read<TrackingProvider>().refresh(),
+          ),
+          SettingsButton(
+            onImportComplete: () =>
+                context.read<TrackingProvider>().refresh(),
           ),
         ],
       ),

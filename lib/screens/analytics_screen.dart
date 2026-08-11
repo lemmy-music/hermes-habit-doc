@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../database/database.dart';
 import '../providers/analytics_provider.dart';
 import '../providers/widget_manager_provider.dart';
+import '../widgets/settings_button.dart';
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 
@@ -45,6 +46,10 @@ class _AnalyticsBody extends StatelessWidget {
               icon: const Icon(Icons.refresh),
               tooltip: 'Refresh',
               onPressed: () => context.read<AnalyticsProvider>().loadData(),
+            ),
+            SettingsButton(
+              onImportComplete: () =>
+                  context.read<AnalyticsProvider>().loadData(),
             ),
           ],
           bottom: const TabBar(

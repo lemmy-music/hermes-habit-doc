@@ -6,6 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../database/database.dart';
 import '../providers/marked_days_provider.dart';
 import '../providers/widget_manager_provider.dart';
+import '../widgets/settings_button.dart';
 
 // ─── German date helpers (kept local, no locale initialization required) ────
 
@@ -118,6 +119,10 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
             tooltip: 'Aktualisieren',
             onPressed: () => context.read<MarkedDaysProvider>().loadData(),
           ),
+          SettingsButton(
+            onImportComplete: () =>
+                context.read<MarkedDaysProvider>().loadData(),
+          ),
         ],
       ),
       body: provider.loading
@@ -179,6 +184,10 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
               focusedDay: _focusedDay,
               startingDayOfWeek: StartingDayOfWeek.monday,
               calendarFormat: CalendarFormat.month,
+              // Only horizontal swiping between months – vertical drags pass
+              // through to the surrounding scroll view (whole screen scrolls
+              // as one unit instead of the calendar swallowing gestures).
+              availableGestures: AvailableGestures.horizontalSwipe,
               availableCalendarFormats: const {
                 CalendarFormat.month: 'Monat',
               },
