@@ -40,6 +40,11 @@ class ThemeProvider extends ChangeNotifier {
   DateFormatPref get dateFormat => _dateFormat;
   TimeFormatPref get timeFormat => _timeFormat;
 
+  /// Locale for Material widgets (date picker, etc.) matching the
+  /// selected date-format preference.
+  Locale get locale =>
+      _dateFormat == DateFormatPref.german ? const Locale('de') : const Locale('en');
+
   /// True when a 24-hour clock should be used (time pickers, labels).
   bool get use24Hour => _timeFormat == TimeFormatPref.h24;
 

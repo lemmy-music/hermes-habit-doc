@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'database/database.dart';
 import 'providers/theme_provider.dart';
@@ -37,6 +38,13 @@ class MyApp extends StatelessWidget {
           title: 'Habit Doc',
           debugShowCheckedModeBanner: false,
           themeMode: theme.themeMode,
+          locale: theme.locale,
+          supportedLocales: const [Locale('de'), Locale('en')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
               seedColor: Colors.blue,
