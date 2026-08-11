@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -1032,6 +1033,126 @@ class _CorrelationTabState extends State<_CorrelationTab> {
   int? _expandedWidgetId1;
   int? _expandedWidgetId2;
 
+  /// True while the (synchronous) correlation math is running.
+  bool _calculating = true;
+
+  /// Guards against re-entrant computation while an async run is in flight.
+  bool _computing = false;
+
+  /// True when at least one pair has enough data for a correlation.
+  bool _anyCorrelation = false;
+
+  /// Precomputed row-major N×N matrix of correlation results.
+  List<CorrelationResult?>? _matrix;
+
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _resultsKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleCompute();
+  }
+
+  @override
+  void dispose() {
+    context.read<AnalyticsProvider>().removeListener(_onProviderChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scheduleCompute() {
+    context.read<AnalyticsProvider>().addListener(_onProviderChanged);
+    _compute();
+  }
+
+  void _onProviderChanged() {
+    if (_computing) return;
+    final provider = context.read<AnalyticsProvider>();
+    if (provider.loading) return;
+    _compute();
+  }
+
+  /// Computes the full correlation matrix off the UI frame so a loading
+  /// indicator can render first (the math itself blocks the web isolate).
+  Future<void> _compute() async {
+    if (_computing) return;
+    _computing = true;
+    _calculating = true;
+    if (mounted) setState(() {});
+
+    // Yield so the loading placeholder gets a frame before the crunching.
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    if (!mounted) return;
+
+    final provider = context.read<AnalyticsProvider>();
+    final widgets = provider.widgets;
+    final n = widgets.length;
+
+    final matrix = List<CorrelationResult?>.filled(n * n, null);
+    var any = false;
+    for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        final result = provider.correlationBetween(
+          widgets[i].id,
+          widgets[j].id,
+          minPoints: i == j ? 0 : kCorrelationMinPoints,
+        );
+        matrix[i * n + j] = result;
+        if (i != j && result != null) any = true;
+      }
+      // Yield periodically so the spinner can keep animating.
+      if (i.isOdd) {
+        await Future<void>.delayed(Duration.zero);
+        if (!mounted) return;
+      }
+    }
+
+    if (!mounted) return;
+    _computing = false;
+    setState(() {
+      _matrix = matrix;
+      _anyCorrelation = any;
+      _calculating = false;
+    });
+    _scrollToResultsIfNeeded();
+  }
+
+  /// Scrolls the result area into view only when it sits outside the
+  /// visible viewport (e.g. after data was tracked on another tab).
+  void _scrollToResultsIfNeeded() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _resultsKey.currentContext;
+      if (ctx == null) return;
+      final renderObject = ctx.findRenderObject();
+      if (renderObject == null || !renderObject.attached) return;
+      final viewport = RenderAbstractViewport.maybeOf(renderObject);
+      if (viewport == null || !_scrollController.hasClients) return;
+
+      final current = _scrollController.offset;
+      final top = viewport.getOffsetToReveal(renderObject, 0.0).offset;
+      final bottom = viewport.getOffsetToReveal(renderObject, 1.0).offset;
+      final max = _scrollController.position.maxScrollExtent;
+
+      if (current < bottom - 1.0) {
+        // Section below the viewport → bring its top into view.
+        _scrollController.animateTo(
+          top.clamp(0.0, max),
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      } else if (current > top + 1.0) {
+        // Section above the viewport → bring its bottom into view.
+        _scrollController.animateTo(
+          bottom.clamp(0.0, max),
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AnalyticsProvider>();
@@ -1053,22 +1174,8 @@ class _CorrelationTabState extends State<_CorrelationTab> {
       );
     }
 
-    // Check if any correlation can be computed
-    bool anyCorrelation = false;
-    for (int i = 0; i < widgets.length; i++) {
-      for (int j = i + 1; j < widgets.length; j++) {
-        if (provider.correlationBetween(
-                widgets[i].id, widgets[j].id,
-                minPoints: kCorrelationMinPoints) !=
-            null) {
-          anyCorrelation = true;
-          break;
-        }
-      }
-      if (anyCorrelation) break;
-    }
-
     return SingleChildScrollView(
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1096,50 +1203,105 @@ class _CorrelationTabState extends State<_CorrelationTab> {
           ),
           const SizedBox(height: 16),
 
-          if (!anyCorrelation)
-            _EmptyState(
-              icon: Icons.hourglass_empty,
-              message: 'Not enough data for correlations.',
-              subtitle:
-                  'Track some overlapping days across 2+ widgets.',
-            )
-          else ...[
-            // Heatmap Grid
-            Text(
-              'Correlation Matrix',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            _CorrelationHeatmap(
-              widgets: widgets,
-              provider: provider,
-              onCellTap: (id1, id2) {
-                setState(() {
-                  if (_expandedWidgetId1 == id1 &&
-                      _expandedWidgetId2 == id2) {
-                    _expandedWidgetId1 = null;
-                    _expandedWidgetId2 = null;
-                  } else {
-                    _expandedWidgetId1 = id1;
-                    _expandedWidgetId2 = id2;
-                  }
-                });
-              },
-            ),
-
-            // Expanded detail
-            if (_expandedWidgetId1 != null && _expandedWidgetId2 != null)
-              _CorrelationDetail(
-                widgetId1: _expandedWidgetId1!,
-                widgetId2: _expandedWidgetId2!,
-                provider: provider,
-                widgets: widgets,
-              ),
-          ],
+          // Result area – always visible so it is clear something is coming.
+          Text(
+            'Correlation Matrix',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _calculating
+                ? const _CorrelationLoadingCard(key: ValueKey('loading'))
+                : !_anyCorrelation
+                    ? _EmptyState(
+                        key: const ValueKey('no-data'),
+                        icon: Icons.hourglass_empty,
+                        message: 'Not enough data for correlations.',
+                        subtitle:
+                            'Track some overlapping days across 2+ widgets.',
+                      )
+                    : Column(
+                        key: _resultsKey,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _CorrelationHeatmap(
+                            widgets: widgets,
+                            matrix: _matrix ?? [],
+                            onCellTap: (id1, id2) {
+                              setState(() {
+                                if (_expandedWidgetId1 == id1 &&
+                                    _expandedWidgetId2 == id2) {
+                                  _expandedWidgetId1 = null;
+                                  _expandedWidgetId2 = null;
+                                } else {
+                                  _expandedWidgetId1 = id1;
+                                  _expandedWidgetId2 = id2;
+                                }
+                              });
+                            },
+                          ),
+                          if (_expandedWidgetId1 != null &&
+                              _expandedWidgetId2 != null &&
+                              _matrix != null)
+                            _buildDetail(widgets) ?? const SizedBox.shrink(),
+                        ],
+                      ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget? _buildDetail(List<CustomWidget> widgets) {
+    final n = widgets.length;
+    final i1 = widgets.indexWhere((w) => w.id == _expandedWidgetId1);
+    final i2 = widgets.indexWhere((w) => w.id == _expandedWidgetId2);
+    if (i1 < 0 || i2 < 0) return null;
+    final result = _matrix![i1 * n + i2];
+    if (result == null) return null;
+
+    return _CorrelationDetail(
+      widgetId1: _expandedWidgetId1!,
+      widgetId2: _expandedWidgetId2!,
+      result: result,
+      provider: context.read<AnalyticsProvider>(),
+      widgets: widgets,
+    );
+  }
+}
+
+class _CorrelationLoadingCard extends StatelessWidget {
+  const _CorrelationLoadingCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      color: cs.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                'Calculating correlations…',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1148,11 +1310,13 @@ class _CorrelationTabState extends State<_CorrelationTab> {
 class _CorrelationHeatmap extends StatelessWidget {
   const _CorrelationHeatmap({
     required this.widgets,
-    required this.provider,
+    required this.matrix,
     required this.onCellTap,
   });
   final List<CustomWidget> widgets;
-  final AnalyticsProvider provider;
+
+  /// Precomputed row-major N×N matrix (see [_CorrelationTabState._compute]).
+  final List<CorrelationResult?> matrix;
   final void Function(int id1, int id2) onCellTap;
 
   Color _cellColor(CorrelationResult? result, ColorScheme cs) {
@@ -1244,11 +1408,7 @@ class _CorrelationHeatmap extends StatelessWidget {
 
                   // Cells
                   ...List.generate(n, (j) {
-                    final result = provider.correlationBetween(
-                      widgets[i].id,
-                      widgets[j].id,
-                      minPoints: i == j ? 0 : kCorrelationMinPoints,
-                    );
+                    final result = matrix[i * n + j];
                     final bgColor = _cellColor(result, cs);
                     final txtColor = _textColor(result, cs);
                     final isClickable = i != j && result != null;
@@ -1336,11 +1496,13 @@ class _CorrelationDetail extends StatelessWidget {
   const _CorrelationDetail({
     required this.widgetId1,
     required this.widgetId2,
+    required this.result,
     required this.provider,
     required this.widgets,
   });
   final int widgetId1;
   final int widgetId2;
+  final CorrelationResult result;
   final AnalyticsProvider provider;
   final List<CustomWidget> widgets;
 
@@ -1354,11 +1516,6 @@ class _CorrelationDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final result =
-        provider.correlationBetween(widgetId1, widgetId2,
-            minPoints: kCorrelationMinPoints);
-    if (result == null) return const SizedBox.shrink();
-
     final w1 =
         widgets.where((w) => w.id == widgetId1).firstOrNull;
     final w2 =
@@ -1589,6 +1746,7 @@ class _StatChip extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
+    super.key,
     required this.icon,
     required this.message,
     required this.subtitle,

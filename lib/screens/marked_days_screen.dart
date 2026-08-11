@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -49,12 +50,58 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
 
+  final ScrollController _scrollController = ScrollController();
+
+  /// Attached to the analysis sections so we can scroll them into view.
+  final GlobalKey _analysisKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _focusedDay = now;
     _selectedDay = now;
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Scrolls the analysis sections into view only when they sit outside the
+  /// visible viewport (e.g. after tapping a day at the top of the calendar).
+  void _scrollToAnalysisIfNeeded() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _analysisKey.currentContext;
+      if (ctx == null) return;
+      final renderObject = ctx.findRenderObject();
+      if (renderObject == null || !renderObject.attached) return;
+      final viewport = RenderAbstractViewport.maybeOf(renderObject);
+      if (viewport == null || !_scrollController.hasClients) return;
+
+      final current = _scrollController.offset;
+      final top = viewport.getOffsetToReveal(renderObject, 0.0).offset;
+      final bottom = viewport.getOffsetToReveal(renderObject, 1.0).offset;
+      final max = _scrollController.position.maxScrollExtent;
+
+      if (current < bottom - 1.0) {
+        // Section below the viewport → bring its top into view.
+        _scrollController.animateTo(
+          top.clamp(0.0, max),
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      } else if (current > top + 1.0) {
+        // Section above the viewport → bring its bottom into view.
+        _scrollController.animateTo(
+          bottom.clamp(0.0, max),
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
   }
 
   @override
@@ -90,18 +137,22 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720),
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(16),
           children: [
             _buildCalendarCard(context, provider),
             const SizedBox(height: 16),
             _HighlightsSection(
-              highlights: provider.similarityHighlights(),
+              key: _analysisKey,
+              highlights: provider.highlights,
               hasMarkedDays: provider.markedDaysCount > 0,
+              analyzing: provider.analyzing,
             ),
             const SizedBox(height: 16),
             _ComparisonSection(
-              comparisons: provider.allComparisons,
+              comparisons: provider.comparisons,
               hasMarkedDays: provider.markedDaysCount > 0,
+              analyzing: provider.analyzing,
             ),
           ],
         ),
@@ -179,7 +230,8 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
                   _focusedDay = focusedDay;
                 });
                 // Tap = markieren/unmarkieren (ohne Texteingabe).
-                provider.toggleDay(selectedDay);
+                context.read<MarkedDaysProvider>().toggleDay(selectedDay).then(
+                    (_) => _scrollToAnalysisIfNeeded());
               },
               onPageChanged: (focusedDay) {
                 setState(() => _focusedDay = focusedDay);
@@ -267,12 +319,17 @@ class _ErrorView extends StatelessWidget {
 
 class _HighlightsSection extends StatelessWidget {
   const _HighlightsSection({
+    super.key,
     required this.highlights,
     required this.hasMarkedDays,
+    required this.analyzing,
   });
 
   final List<SimilarityHighlight> highlights;
   final bool hasMarkedDays;
+
+  /// True while the comparison/highlight analysis is running.
+  final bool analyzing;
 
   @override
   Widget build(BuildContext context) {
@@ -309,21 +366,64 @@ class _HighlightsSection extends StatelessWidget {
                   ?.copyWith(color: cs.outline),
             ),
             const SizedBox(height: 12),
-            if (!hasMarkedDays)
-              _EmptyHint(
-                icon: Icons.event_available,
-                text: 'Markiere zuerst Tage im Kalender, um '
-                    'Ähnlichkeiten zu sehen.',
-              )
-            else if (highlights.isEmpty)
-              const _EmptyHint(
-                icon: Icons.check_box_outlined,
-                text: 'Keine Checkbox-Daten an markierten Tagen.',
-              )
-            else
-              ...highlights.map((h) => _HighlightTile(highlight: h)),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: analyzing
+                  ? const _AnalyzingRow(key: ValueKey('analyzing'))
+                  : !hasMarkedDays
+                      ? _EmptyHint(
+                          key: const ValueKey('no-marked'),
+                          icon: Icons.event_available,
+                          text: 'Markiere zuerst Tage im Kalender, um '
+                              'Ähnlichkeiten zu sehen.',
+                        )
+                      : highlights.isEmpty
+                          ? const _EmptyHint(
+                              key: ValueKey('no-data'),
+                              icon: Icons.check_box_outlined,
+                              text: 'Keine Checkbox-Daten an markierten Tagen.',
+                            )
+                          : Column(
+                              key: const ValueKey('results'),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: highlights
+                                  .map((h) => _HighlightTile(highlight: h))
+                                  .toList(),
+                            ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Small loading row shown while the analysis is being recomputed.
+class _AnalyzingRow extends StatelessWidget {
+  const _AnalyzingRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Berechne Auswertung…',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
@@ -367,10 +467,14 @@ class _ComparisonSection extends StatelessWidget {
   const _ComparisonSection({
     required this.comparisons,
     required this.hasMarkedDays,
+    required this.analyzing,
   });
 
   final List<MarkedComparison> comparisons;
   final bool hasMarkedDays;
+
+  /// True while the comparison/highlight analysis is running.
+  final bool analyzing;
 
   @override
   Widget build(BuildContext context) {
@@ -415,25 +519,37 @@ class _ComparisonSection extends StatelessWidget {
                   ?.copyWith(color: cs.outline),
             ),
             const SizedBox(height: 12),
-            if (!hasMarkedDays)
-              const _EmptyHint(
-                icon: Icons.event_available,
-                text: 'Markiere Tage im Kalender, um sie mit '
-                    'den anderen Tagen zu vergleichen.',
-              )
-            else if (comparisons.isEmpty)
-              const _EmptyHint(
-                icon: Icons.bar_chart,
-                text: 'Noch keine vergleichbaren Daten. '
-                    'Tracke an markierten und anderen Tagen.',
-              )
-            else
-              ...comparisons.map(
-                (c) => _ComparisonRow(
-                  comparison: c,
-                  maxAbsDelta: maxAbsDelta,
-                ),
-              ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: analyzing
+                  ? const _AnalyzingRow(key: ValueKey('analyzing'))
+                  : !hasMarkedDays
+                      ? const _EmptyHint(
+                          key: ValueKey('no-marked'),
+                          icon: Icons.event_available,
+                          text: 'Markiere Tage im Kalender, um sie mit '
+                              'den anderen Tagen zu vergleichen.',
+                        )
+                      : comparisons.isEmpty
+                          ? const _EmptyHint(
+                              key: ValueKey('no-data'),
+                              icon: Icons.bar_chart,
+                              text: 'Noch keine vergleichbaren Daten. '
+                                  'Tracke an markierten und anderen Tagen.',
+                            )
+                          : Column(
+                              key: const ValueKey('results'),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: comparisons
+                                  .map(
+                                    (c) => _ComparisonRow(
+                                      comparison: c,
+                                      maxAbsDelta: maxAbsDelta,
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+            ),
           ],
         ),
       ),
@@ -734,7 +850,7 @@ class _DeltaBar extends StatelessWidget {
 // ─── Shared empty hint ───────────────────────────────────────────────────────
 
 class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({required this.icon, required this.text});
+  const _EmptyHint({super.key, required this.icon, required this.text});
 
   final IconData icon;
   final String text;

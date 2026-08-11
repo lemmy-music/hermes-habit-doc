@@ -89,12 +89,29 @@ class MarkedDaysProvider extends ChangeNotifier {
   bool _loading = false;
   String? _error;
 
+  // Cached analysis results (recomputed off-frame so the UI can show a
+  // loading indicator while the math runs).
+  bool _analyzing = false;
+  List<SimilarityHighlight> _highlights = [];
+  List<MarkedComparison> _comparisons = [];
+  int _analysisVersion = 0;
+  bool _disposed = false;
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   List<MarkedDay> get markedDays => List.unmodifiable(_markedDays);
   List<CustomWidget> get widgets => List.unmodifiable(_widgets);
   bool get loading => _loading;
   String? get error => _error;
+
+  /// True while the comparison/highlight analysis is running.
+  bool get analyzing => _analyzing;
+
+  /// Checkbox highlights for marked days (see [similarityHighlights]).
+  List<SimilarityHighlight> get highlights => List.unmodifiable(_highlights);
+
+  /// Comparison of marked vs. unmarked days for every widget with data.
+  List<MarkedComparison> get comparisons => List.unmodifiable(_comparisons);
 
   /// Keys (YYYY-MM-DD) of all marked days.
   Set<String> get markedDayKeys =>
@@ -123,6 +140,8 @@ class MarkedDaysProvider extends ChangeNotifier {
     } finally {
       _loading = false;
       notifyListeners();
+      // Fire-and-forget: the analysis sections show their own spinner.
+      _runAnalysis();
     }
   }
 
@@ -155,6 +174,7 @@ class MarkedDaysProvider extends ChangeNotifier {
         );
       }
       await _reloadMarkedDays();
+      await _runAnalysis();
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -168,11 +188,17 @@ class MarkedDaysProvider extends ChangeNotifier {
     await toggleDay(normalized);
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   // ── Value Parsing ─────────────────────────────────────────────────────────
 
   /// Parses an event value to double (minutes for duration, minutes-since-
   /// midnight for time, 1.0/0.0 for checkbox).
-  double? _parseValue(TrackingEvent e, FieldType ft) {
+  static double? _parseValueStatic(TrackingEvent e, FieldType ft) {
     switch (ft) {
       case FieldType.number:
         return double.tryParse(e.value);
@@ -200,17 +226,48 @@ class MarkedDaysProvider extends ChangeNotifier {
 
   // ── Statistics ────────────────────────────────────────────────────────────
 
-  /// Daily averages for a widget: "YYYY-MM-DD" → average value.
-  Map<String, double> dailyAverages(int widgetId) {
-    final widget = _widgets.where((w) => w.id == widgetId).firstOrNull;
-    if (widget == null) return {};
+  /// Recomputes highlights + comparisons off-frame.
+  ///
+  /// The math is synchronous CPU work (1–2 s on web), so we first notify so
+  /// the UI can show a loading placeholder, then crunch on a snapshot.
+  /// A version counter makes sure a newer run always wins over an older one.
+  Future<void> _runAnalysis() async {
+    final version = ++_analysisVersion;
+    _analyzing = true;
+    notifyListeners();
 
+    // Yield so the loading placeholders get a frame before the crunching.
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    if (_disposed || version != _analysisVersion) return;
+
+    final widgets = List<CustomWidget>.of(_widgets);
+    final events = Map<int, List<TrackingEvent>>.of(_eventsByWidgetId);
+    final marked = markedDayKeys;
+
+    final comparisons = _computeComparisons(widgets, events, marked);
+    // Yield so the spinner can keep animating between the two heavy steps.
+    await Future<void>.delayed(Duration.zero);
+    if (_disposed || version != _analysisVersion) return;
+    final highlights = _computeHighlights(widgets, events, marked);
+
+    if (_disposed || version != _analysisVersion) return;
+    _comparisons = comparisons;
+    _highlights = highlights;
+    _analyzing = false;
+    notifyListeners();
+  }
+
+  /// Daily averages for a widget: "YYYY-MM-DD" → average value.
+  static Map<String, double> _dailyAveragesFor(
+    CustomWidget widget,
+    Map<int, List<TrackingEvent>> eventsByWidgetId,
+  ) {
     final ft = FieldType.fromDb(widget.fieldType);
-    final events = _eventsByWidgetId[widgetId] ?? [];
+    final events = eventsByWidgetId[widget.id] ?? [];
 
     final Map<String, List<double>> byDay = {};
     for (final e in events) {
-      final v = _parseValue(e, ft);
+      final v = _parseValueStatic(e, ft);
       if (v == null) continue;
       byDay.putIfAbsent(dayKey(e.timestamp), () => []).add(v);
     }
@@ -224,17 +281,17 @@ class MarkedDaysProvider extends ChangeNotifier {
   /// Compares a widget's daily values on marked vs. unmarked days.
   ///
   /// Returns a [MarkedComparison]; averages are null for groups without data.
-  MarkedComparison? compareMarkedVsUnmarked(int widgetId) {
-    final widget = _widgets.where((w) => w.id == widgetId).firstOrNull;
-    if (widget == null) return null;
-
-    final avgs = dailyAverages(widgetId);
-    final marked = markedDayKeys;
+  static MarkedComparison? _compareMarkedVsUnmarked(
+    CustomWidget widget,
+    Map<int, List<TrackingEvent>> eventsByWidgetId,
+    Set<String> markedKeys,
+  ) {
+    final avgs = _dailyAveragesFor(widget, eventsByWidgetId);
 
     final markedValues = <double>[];
     final unmarkedValues = <double>[];
     avgs.forEach((key, value) {
-      if (marked.contains(key)) {
+      if (markedKeys.contains(key)) {
         markedValues.add(value);
       } else {
         unmarkedValues.add(value);
@@ -255,10 +312,14 @@ class MarkedDaysProvider extends ChangeNotifier {
 
   /// Comparisons for every widget that has data on both marked and
   /// unmarked days.
-  List<MarkedComparison> get allComparisons {
+  static List<MarkedComparison> _computeComparisons(
+    List<CustomWidget> widgets,
+    Map<int, List<TrackingEvent>> eventsByWidgetId,
+    Set<String> markedKeys,
+  ) {
     final result = <MarkedComparison>[];
-    for (final w in _widgets) {
-      final c = compareMarkedVsUnmarked(w.id);
+    for (final w in widgets) {
+      final c = _compareMarkedVsUnmarked(w, eventsByWidgetId, markedKeys);
       if (c != null && c.hasBothGroups) {
         result.add(c);
       }
@@ -268,18 +329,21 @@ class MarkedDaysProvider extends ChangeNotifier {
 
   /// Checkbox highlights: how often the dominant state occurred on marked
   /// days, sorted by percentage descending.
-  List<SimilarityHighlight> similarityHighlights() {
+  static List<SimilarityHighlight> _computeHighlights(
+    List<CustomWidget> widgets,
+    Map<int, List<TrackingEvent>> eventsByWidgetId,
+    Set<String> markedKeys,
+  ) {
     final highlights = <SimilarityHighlight>[];
-    final marked = markedDayKeys;
 
-    for (final w in _widgets) {
+    for (final w in widgets) {
       if (FieldType.fromDb(w.fieldType) != FieldType.checkbox) continue;
 
-      final avgs = dailyAverages(w.id);
+      final avgs = _dailyAveragesFor(w, eventsByWidgetId);
       var trueDays = 0;
       var dataDays = 0;
       avgs.forEach((key, value) {
-        if (!marked.contains(key)) return;
+        if (!markedKeys.contains(key)) return;
         dataDays++;
         if (value >= 0.5) trueDays++;
       });

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../database/database.dart';
-import '../providers/theme_provider.dart';
 import '../providers/widget_manager_provider.dart';
 import '../services/data_port_service.dart';
 
@@ -24,21 +23,11 @@ class _WidgetManagerView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.effectivelyDark(
-        MediaQuery.of(context).platformBrightness);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Widget Manager'),
         centerTitle: true,
         actions: [
-          // Dark-mode toggle
-          IconButton(
-            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-            tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-            onPressed: () => themeProvider.toggleTheme(),
-          ),
           // Export button
           IconButton(
             icon: const Icon(Icons.upload_file),
