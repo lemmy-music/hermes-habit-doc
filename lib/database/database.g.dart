@@ -515,17 +515,237 @@ class TrackingEventsCompanion extends UpdateCompanion<TrackingEvent> {
   }
 }
 
+class $MarkedDaysTable extends MarkedDays
+    with TableInfo<$MarkedDaysTable, MarkedDay> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MarkedDaysTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+      'date', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+      'label', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [id, date, label];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'marked_days';
+  @override
+  VerificationContext validateIntegrity(Insertable<MarkedDay> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+          _labelMeta, label.isAcceptableOrUnknown(data['label']!, _labelMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MarkedDay map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MarkedDay(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      label: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}label']),
+    );
+  }
+
+  @override
+  $MarkedDaysTable createAlias(String alias) {
+    return $MarkedDaysTable(attachedDatabase, alias);
+  }
+}
+
+class MarkedDay extends DataClass implements Insertable<MarkedDay> {
+  final int id;
+  final DateTime date;
+  final String? label;
+  const MarkedDay({required this.id, required this.date, this.label});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['date'] = Variable<DateTime>(date);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    return map;
+  }
+
+  MarkedDaysCompanion toCompanion(bool nullToAbsent) {
+    return MarkedDaysCompanion(
+      id: Value(id),
+      date: Value(date),
+      label:
+          label == null && nullToAbsent ? const Value.absent() : Value(label),
+    );
+  }
+
+  factory MarkedDay.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MarkedDay(
+      id: serializer.fromJson<int>(json['id']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      label: serializer.fromJson<String?>(json['label']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'date': serializer.toJson<DateTime>(date),
+      'label': serializer.toJson<String?>(label),
+    };
+  }
+
+  MarkedDay copyWith(
+          {int? id,
+          DateTime? date,
+          Value<String?> label = const Value.absent()}) =>
+      MarkedDay(
+        id: id ?? this.id,
+        date: date ?? this.date,
+        label: label.present ? label.value : this.label,
+      );
+  MarkedDay copyWithCompanion(MarkedDaysCompanion data) {
+    return MarkedDay(
+      id: data.id.present ? data.id.value : this.id,
+      date: data.date.present ? data.date.value : this.date,
+      label: data.label.present ? data.label.value : this.label,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MarkedDay(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('label: $label')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, date, label);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MarkedDay &&
+          other.id == this.id &&
+          other.date == this.date &&
+          other.label == this.label);
+}
+
+class MarkedDaysCompanion extends UpdateCompanion<MarkedDay> {
+  final Value<int> id;
+  final Value<DateTime> date;
+  final Value<String?> label;
+  const MarkedDaysCompanion({
+    this.id = const Value.absent(),
+    this.date = const Value.absent(),
+    this.label = const Value.absent(),
+  });
+  MarkedDaysCompanion.insert({
+    this.id = const Value.absent(),
+    required DateTime date,
+    this.label = const Value.absent(),
+  }) : date = Value(date);
+  static Insertable<MarkedDay> custom({
+    Expression<int>? id,
+    Expression<DateTime>? date,
+    Expression<String>? label,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (date != null) 'date': date,
+      if (label != null) 'label': label,
+    });
+  }
+
+  MarkedDaysCompanion copyWith(
+      {Value<int>? id, Value<DateTime>? date, Value<String?>? label}) {
+    return MarkedDaysCompanion(
+      id: id ?? this.id,
+      date: date ?? this.date,
+      label: label ?? this.label,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MarkedDaysCompanion(')
+          ..write('id: $id, ')
+          ..write('date: $date, ')
+          ..write('label: $label')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CustomWidgetsTable customWidgets = $CustomWidgetsTable(this);
   late final $TrackingEventsTable trackingEvents = $TrackingEventsTable(this);
+  late final $MarkedDaysTable markedDays = $MarkedDaysTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [customWidgets, trackingEvents];
+      [customWidgets, trackingEvents, markedDays];
 }
 
 typedef $$CustomWidgetsTableCreateCompanionBuilder = CustomWidgetsCompanion
@@ -833,6 +1053,135 @@ typedef $$TrackingEventsTableProcessedTableManager = ProcessedTableManager<
     ),
     TrackingEvent,
     PrefetchHooks Function()>;
+typedef $$MarkedDaysTableCreateCompanionBuilder = MarkedDaysCompanion Function({
+  Value<int> id,
+  required DateTime date,
+  Value<String?> label,
+});
+typedef $$MarkedDaysTableUpdateCompanionBuilder = MarkedDaysCompanion Function({
+  Value<int> id,
+  Value<DateTime> date,
+  Value<String?> label,
+});
+
+class $$MarkedDaysTableFilterComposer
+    extends Composer<_$AppDatabase, $MarkedDaysTable> {
+  $$MarkedDaysTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get label => $composableBuilder(
+      column: $table.label, builder: (column) => ColumnFilters(column));
+}
+
+class $$MarkedDaysTableOrderingComposer
+    extends Composer<_$AppDatabase, $MarkedDaysTable> {
+  $$MarkedDaysTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get label => $composableBuilder(
+      column: $table.label, builder: (column) => ColumnOrderings(column));
+}
+
+class $$MarkedDaysTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MarkedDaysTable> {
+  $$MarkedDaysTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+}
+
+class $$MarkedDaysTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $MarkedDaysTable,
+    MarkedDay,
+    $$MarkedDaysTableFilterComposer,
+    $$MarkedDaysTableOrderingComposer,
+    $$MarkedDaysTableAnnotationComposer,
+    $$MarkedDaysTableCreateCompanionBuilder,
+    $$MarkedDaysTableUpdateCompanionBuilder,
+    (MarkedDay, BaseReferences<_$AppDatabase, $MarkedDaysTable, MarkedDay>),
+    MarkedDay,
+    PrefetchHooks Function()> {
+  $$MarkedDaysTableTableManager(_$AppDatabase db, $MarkedDaysTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MarkedDaysTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MarkedDaysTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MarkedDaysTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<DateTime> date = const Value.absent(),
+            Value<String?> label = const Value.absent(),
+          }) =>
+              MarkedDaysCompanion(
+            id: id,
+            date: date,
+            label: label,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required DateTime date,
+            Value<String?> label = const Value.absent(),
+          }) =>
+              MarkedDaysCompanion.insert(
+            id: id,
+            date: date,
+            label: label,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$MarkedDaysTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $MarkedDaysTable,
+    MarkedDay,
+    $$MarkedDaysTableFilterComposer,
+    $$MarkedDaysTableOrderingComposer,
+    $$MarkedDaysTableAnnotationComposer,
+    $$MarkedDaysTableCreateCompanionBuilder,
+    $$MarkedDaysTableUpdateCompanionBuilder,
+    (MarkedDay, BaseReferences<_$AppDatabase, $MarkedDaysTable, MarkedDay>),
+    MarkedDay,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -841,4 +1190,6 @@ class $AppDatabaseManager {
       $$CustomWidgetsTableTableManager(_db, _db.customWidgets);
   $$TrackingEventsTableTableManager get trackingEvents =>
       $$TrackingEventsTableTableManager(_db, _db.trackingEvents);
+  $$MarkedDaysTableTableManager get markedDays =>
+      $$MarkedDaysTableTableManager(_db, _db.markedDays);
 }

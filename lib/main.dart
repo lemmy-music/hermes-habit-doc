@@ -5,6 +5,7 @@ import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/tracking_screen.dart';
 import 'screens/analytics_screen.dart';
+import 'screens/marked_days_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +72,7 @@ class _MainNavigationState extends State<MainNavigation> {
     const HomeScreen(),
     const TrackingScreen(),
     const AnalyticsScreen(),
+    const MarkedDaysScreen(),
   ];
 
   @override
@@ -99,6 +101,11 @@ class _MainNavigationState extends State<MainNavigation> {
             icon: Icon(Icons.analytics_outlined),
             selectedIcon: Icon(Icons.analytics),
             label: 'Analytics',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
+            label: 'Tage',
           ),
         ],
       ),

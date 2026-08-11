@@ -21,6 +21,16 @@ class TrackingEvents extends Table {
   DateTimeColumn get timestamp => dateTime().withDefault(currentDateAndTime)();
 }
 
+/// Days that the user explicitly marked for later analysis.
+///
+/// Only the date (without time of day) is relevant; [label] is reserved for
+/// future use (the user currently marks days without entering any text).
+class MarkedDays extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  DateTimeColumn get date => dateTime().unique()();
+  TextColumn get label => text().nullable()();
+}
+
 // ─── Database ────────────────────────────────────────────────────────────────
 
 /// Web-compatible Drift database.
@@ -29,12 +39,23 @@ class TrackingEvents extends Table {
 /// - Native platforms (Android, iOS, macOS, Windows, Linux): sqlite3 file-based DB
 /// - Web platform: IndexedDB-backed storage (no dart:ffi, no WASM required for
 ///   basic support — completely safe in the browser)
-@DriftDatabase(tables: [CustomWidgets, TrackingEvents])
+@DriftDatabase(tables: [CustomWidgets, TrackingEvents, MarkedDays])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          // v1 → v2: new MarkedDays table
+          if (from < 2) {
+            await m.createTable(markedDays);
+          }
+        },
+      );
 
   // ── Connection factory ────────────────────────────────────────────────────
 
@@ -106,4 +127,20 @@ class AppDatabase extends _$AppDatabase {
       (select(trackingEvents)
             ..orderBy([(t) => OrderingTerm.desc(t.timestamp)]))
           .get();
+
+  // ── MarkedDays CRUD ──────────────────────────────────────────────────────
+
+  Future<List<MarkedDay>> getAllMarkedDays() => select(markedDays).get();
+
+  Stream<List<MarkedDay>> watchAllMarkedDays() => select(markedDays).watch();
+
+  Future<MarkedDay?> getMarkedDayByDate(DateTime date) =>
+      (select(markedDays)..where((t) => t.date.equals(date)))
+          .getSingleOrNull();
+
+  Future<int> insertMarkedDay(MarkedDaysCompanion day) =>
+      into(markedDays).insert(day);
+
+  Future<int> deleteMarkedDay(int id) =>
+      (delete(markedDays)..where((t) => t.id.equals(id))).go();
 }
