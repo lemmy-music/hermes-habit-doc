@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -51,58 +50,12 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
 
-  final ScrollController _scrollController = ScrollController();
-
-  /// Attached to the analysis sections so we can scroll them into view.
-  final GlobalKey _analysisKey = GlobalKey();
-
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _focusedDay = now;
     _selectedDay = now;
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  /// Scrolls the analysis sections into view only when they sit outside the
-  /// visible viewport (e.g. after tapping a day at the top of the calendar).
-  void _scrollToAnalysisIfNeeded() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final ctx = _analysisKey.currentContext;
-      if (ctx == null) return;
-      final renderObject = ctx.findRenderObject();
-      if (renderObject == null || !renderObject.attached) return;
-      final viewport = RenderAbstractViewport.maybeOf(renderObject);
-      if (viewport == null || !_scrollController.hasClients) return;
-
-      final current = _scrollController.offset;
-      final top = viewport.getOffsetToReveal(renderObject, 0.0).offset;
-      final bottom = viewport.getOffsetToReveal(renderObject, 1.0).offset;
-      final max = _scrollController.position.maxScrollExtent;
-
-      if (current < bottom - 1.0) {
-        // Section below the viewport → bring its top into view.
-        _scrollController.animateTo(
-          top.clamp(0.0, max),
-          duration: const Duration(milliseconds: 450),
-          curve: Curves.easeOutCubic,
-        );
-      } else if (current > top + 1.0) {
-        // Section above the viewport → bring its bottom into view.
-        _scrollController.animateTo(
-          bottom.clamp(0.0, max),
-          duration: const Duration(milliseconds: 450),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    });
   }
 
   @override
@@ -142,13 +95,11 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720),
         child: ListView(
-          controller: _scrollController,
           padding: const EdgeInsets.all(16),
           children: [
             _buildCalendarCard(context, provider),
             const SizedBox(height: 16),
             _HighlightsSection(
-              key: _analysisKey,
               highlights: provider.highlights,
               hasMarkedDays: provider.markedDaysCount > 0,
               analyzing: provider.analyzing,
@@ -239,8 +190,7 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
                   _focusedDay = focusedDay;
                 });
                 // Tap = markieren/unmarkieren (ohne Texteingabe).
-                context.read<MarkedDaysProvider>().toggleDay(selectedDay).then(
-                    (_) => _scrollToAnalysisIfNeeded());
+                context.read<MarkedDaysProvider>().toggleDay(selectedDay);
               },
               onPageChanged: (focusedDay) {
                 setState(() => _focusedDay = focusedDay);
@@ -328,7 +278,6 @@ class _ErrorView extends StatelessWidget {
 
 class _HighlightsSection extends StatelessWidget {
   const _HighlightsSection({
-    super.key,
     required this.highlights,
     required this.hasMarkedDays,
     required this.analyzing,
