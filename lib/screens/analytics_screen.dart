@@ -48,9 +48,9 @@ class _AnalyticsBody extends StatelessWidget {
           ],
           bottom: const TabBar(
             tabs: [
-              Tab(icon: Icon(Icons.timeline), text: 'Timeline'),
               Tab(icon: Icon(Icons.bar_chart), text: 'Charts'),
               Tab(icon: Icon(Icons.grid_on), text: 'Correlation'),
+              Tab(icon: Icon(Icons.timeline), text: 'Timeline'),
             ],
           ),
         ),
@@ -63,9 +63,9 @@ class _AnalyticsBody extends StatelessWidget {
                   )
                 : const TabBarView(
                     children: [
-                      _TimelineTab(),
                       _ChartsTab(),
                       _CorrelationTab(),
+                      _TimelineTab(),
                     ],
                   ),
       ),
