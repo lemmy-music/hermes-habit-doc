@@ -19,7 +19,7 @@ class SettingsButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.settings),
-      tooltip: 'Einstellungen',
+      tooltip: 'Settings',
       onPressed: () => _openSettings(context),
     );
   }
@@ -57,7 +57,7 @@ class _SettingsSheet extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
             child: Text(
-              'Einstellungen',
+              'Settings',
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
@@ -73,22 +73,90 @@ class _SettingsSheet extends StatelessWidget {
             ),
             title: const Text('Dark Mode'),
             subtitle: Text(
-              isDark ? 'Dunkles Farbschema aktiv' : 'Helles Farbschema aktiv',
+              isDark
+                  ? 'Dark color scheme active'
+                  : 'Light color scheme active',
             ),
             value: isDark,
             onChanged: (value) => themeProvider.setDark(value),
           ),
           const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.date_range, color: cs.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Date format',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<DateFormatPref>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: DateFormatPref.german,
+                      label: Text('DE (TT.MM.)'),
+                    ),
+                    ButtonSegment(
+                      value: DateFormatPref.us,
+                      label: Text('US (MM/DD)'),
+                    ),
+                  ],
+                  selected: {themeProvider.dateFormat},
+                  onSelectionChanged: (selection) =>
+                      themeProvider.setDateFormat(selection.first),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, color: cs.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Time format',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<TimeFormatPref>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: TimeFormatPref.h24,
+                      label: Text('24h'),
+                    ),
+                    ButtonSegment(
+                      value: TimeFormatPref.h12,
+                      label: Text('12h (AM/PM)'),
+                    ),
+                  ],
+                  selected: {themeProvider.timeFormat},
+                  onSelectionChanged: (selection) =>
+                      themeProvider.setTimeFormat(selection.first),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
           ListTile(
             leading: Icon(Icons.upload_file, color: cs.primary),
             title: const Text('Export (JSON)'),
-            subtitle: const Text('Alle Widgets & Events als Datei sichern'),
+            subtitle: const Text('Save all widgets & events to a file'),
             onTap: () => _exportData(context),
           ),
           ListTile(
             leading: Icon(Icons.download_for_offline, color: cs.primary),
             title: const Text('Import (JSON)'),
-            subtitle: const Text('Daten aus einer Export-Datei einspielen'),
+            subtitle: const Text('Import data from an export file'),
             onTap: () => _importData(context),
           ),
           const SizedBox(height: 8),

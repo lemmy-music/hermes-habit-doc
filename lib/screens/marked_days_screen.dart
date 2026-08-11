@@ -4,24 +4,41 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../database/database.dart';
 import '../providers/marked_days_provider.dart';
+import '../providers/theme_provider.dart';
 import '../providers/widget_manager_provider.dart';
 import '../widgets/settings_button.dart';
 
-// ─── German date helpers (kept local, no locale initialization required) ────
+// ─── Date helpers (kept local, no locale initialization required) ───────────
 
 const List<String> _germanMonths = [
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
 ];
 
+const List<String> _englishMonths = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 const List<String> _germanWeekdays = [
   'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So',
 ];
 
-String _formatMonthTitle(DateTime day) =>
-    '${_germanMonths[day.month - 1]} ${day.year}';
+const List<String> _englishWeekdays = [
+  'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+];
 
-String _formatWeekday(DateTime day) => _germanWeekdays[day.weekday - 1];
+String _formatMonthTitle(DateTime day, DateFormatPref pref) {
+  final months =
+      pref == DateFormatPref.german ? _germanMonths : _englishMonths;
+  return '${months[day.month - 1]} ${day.year}';
+}
+
+String _formatWeekday(DateTime day, DateFormatPref pref) {
+  final weekdays =
+      pref == DateFormatPref.german ? _germanWeekdays : _englishWeekdays;
+  return weekdays[day.weekday - 1];
+}
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 
@@ -64,12 +81,12 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tage'),
+        title: const Text('Days'),
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Aktualisieren',
+            tooltip: 'Refresh',
             onPressed: () => context.read<MarkedDaysProvider>().loadData(),
           ),
           SettingsButton(
@@ -119,6 +136,8 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
   Widget _buildCalendarCard(BuildContext context, MarkedDaysProvider provider) {
     final cs = Theme.of(context).colorScheme;
     final now = DateTime.now();
+    final settings = context.watch<ThemeProvider>();
+    final datePref = settings.dateFormat;
 
     return Card(
       elevation: 0,
@@ -140,15 +159,15 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
               // as one unit instead of the calendar swallowing gestures).
               availableGestures: AvailableGestures.horizontalSwipe,
               availableCalendarFormats: const {
-                CalendarFormat.month: 'Monat',
+                CalendarFormat.month: 'Month',
               },
               headerStyle: HeaderStyle(
                 titleCentered: true,
                 formatButtonVisible: false,
-                titleTextFormatter: (day, _) => _formatMonthTitle(day),
+                titleTextFormatter: (day, _) => _formatMonthTitle(day, datePref),
               ),
               daysOfWeekStyle: DaysOfWeekStyle(
-                dowTextFormatter: (day, _) => _formatWeekday(day),
+                dowTextFormatter: (day, _) => _formatWeekday(day, datePref),
                 weekdayStyle: TextStyle(
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -212,7 +231,7 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Markiert',
+                    'Marked',
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
@@ -221,8 +240,8 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
                   const Spacer(),
                   Text(
                     provider.markedDaysCount == 1
-                        ? '1 markierter Tag'
-                        : '${provider.markedDaysCount} markierte Tage',
+                        ? '1 marked day'
+                        : '${provider.markedDaysCount} marked days',
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
@@ -258,14 +277,14 @@ class _ErrorView extends StatelessWidget {
             Icon(Icons.error_outline,
                 size: 48, color: Theme.of(context).colorScheme.error),
             const SizedBox(height: 12),
-            Text('Fehler: $error',
+            Text('Error: $error',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('Erneut versuchen'),
+              label: const Text('Retry'),
             ),
           ],
         ),
@@ -307,7 +326,7 @@ class _HighlightsSection extends StatelessWidget {
                 Icon(Icons.auto_awesome, color: cs.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Ähnlichkeits-Highlights',
+                  'Similarity Highlights',
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
@@ -317,7 +336,7 @@ class _HighlightsSection extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Wie oft ein Wert an markierten Tagen auftrat.',
+              'How often a value occurred on marked days.',
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
@@ -332,14 +351,13 @@ class _HighlightsSection extends StatelessWidget {
                       ? _EmptyHint(
                           key: const ValueKey('no-marked'),
                           icon: Icons.event_available,
-                          text: 'Markiere zuerst Tage im Kalender, um '
-                              'Ähnlichkeiten zu sehen.',
+                          text: 'First mark days in the calendar to see similarities.',
                         )
                       : highlights.isEmpty
                           ? const _EmptyHint(
                               key: ValueKey('no-data'),
                               icon: Icons.check_box_outlined,
-                              text: 'Keine Checkbox-Daten an markierten Tagen.',
+                              text: 'No checkbox data on marked days.',
                             )
                           : Column(
                               key: const ValueKey('results'),
@@ -375,7 +393,7 @@ class _AnalyzingRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            'Berechne Auswertung…',
+            'Calculating analysis…',
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium
@@ -459,7 +477,7 @@ class _ComparisonSection extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Vergleich: markierte vs. andere Tage',
+                    'Comparison: marked vs. other days',
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
@@ -470,7 +488,7 @@ class _ComparisonSection extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Ø-Wert pro Tag — nur Widgets mit Daten.',
+              'Ø value per day — only widgets with data.',
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
@@ -485,15 +503,15 @@ class _ComparisonSection extends StatelessWidget {
                       ? const _EmptyHint(
                           key: ValueKey('no-marked'),
                           icon: Icons.event_available,
-                          text: 'Markiere Tage im Kalender, um sie mit '
-                              'den anderen Tagen zu vergleichen.',
+                          text: 'Mark days in the calendar to compare them '
+                              'with other days.',
                         )
                       : comparisons.isEmpty
                           ? const _EmptyHint(
                               key: ValueKey('no-data'),
                               icon: Icons.bar_chart,
-                              text: 'Noch keine vergleichbaren Daten. '
-                                  'Tracke an markierten und anderen Tagen.',
+                              text: 'No comparable data yet. '
+                                  'Track on marked and other days.',
                             )
                           : Column(
                               key: const ValueKey('results'),
@@ -642,7 +660,7 @@ class _ComparisonRow extends StatelessWidget {
             children: [
               Expanded(
                 child: _AvgColumn(
-                  label: 'Ø markiert',
+                  label: 'Ø marked',
                   value: _formatValue(comparison.avgMarked!, ft),
                   days: comparison.markedDaysWithData,
                   highlight: true,
@@ -651,7 +669,7 @@ class _ComparisonRow extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _AvgColumn(
-                  label: 'Ø andere',
+                  label: 'Ø other',
                   value: _formatValue(comparison.avgUnmarked!, ft),
                   days: comparison.unmarkedDaysWithData,
                   highlight: false,
@@ -673,8 +691,8 @@ class _ComparisonRow extends StatelessWidget {
             children: [
               Text(
                 deltaPositive
-                    ? 'höher an markierten Tagen'
-                    : 'niedriger an markierten Tagen',
+                    ? 'higher on marked days'
+                    : 'lower on marked days',
                 style: Theme.of(context)
                     .textTheme
                     .labelSmall
@@ -724,7 +742,7 @@ class _AvgColumn extends StatelessWidget {
               ),
         ),
         Text(
-          '$days Tag${days == 1 ? '' : 'e'}',
+          '$days day${days == 1 ? '' : 's'}',
           style: Theme.of(context)
               .textTheme
               .labelSmall

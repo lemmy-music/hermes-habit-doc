@@ -105,7 +105,7 @@ class _MainNavigationState extends State<MainNavigation> {
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
             selectedIcon: Icon(Icons.calendar_month),
-            label: 'Tage',
+            label: 'Days',
           ),
         ],
       ),

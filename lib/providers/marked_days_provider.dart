@@ -65,7 +65,7 @@ class SimilarityHighlight {
   });
 
   String get label =>
-      'An $percentage% der markierten Tage: ${widget.name} '
+      'On $percentage% of marked days: ${widget.name} '
       '${dominantValue ? '✓' : '✗'}';
 }
 

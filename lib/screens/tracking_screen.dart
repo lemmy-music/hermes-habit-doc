@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../database/database.dart';
+import '../providers/theme_provider.dart';
 import '../providers/tracking_provider.dart';
 import '../providers/widget_manager_provider.dart';
 import '../widgets/settings_button.dart';
@@ -194,6 +195,7 @@ class _TrackingCardState extends State<_TrackingCard> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TrackingProvider>();
+    final settings = context.watch<ThemeProvider>();
     final state = provider.stateFor(widget.widget.id);
     if (state == null) return const SizedBox.shrink();
 
@@ -277,7 +279,7 @@ class _TrackingCardState extends State<_TrackingCard> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Timestamp: today at ${state.timeValue.isNotEmpty ? state.timeValue : "--:--"}',
+                          'Timestamp: today at ${state.timeValue.isNotEmpty ? _formatStoredTime(state.timeValue, settings) : "--:--"}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
@@ -604,6 +606,20 @@ class _DurationInput extends StatelessWidget {
 
 // ─── Time Input ───────────────────────────────────────────────────────────────
 
+/// Formats a stored "HH:mm" value according to the selected time format
+/// (24h stays `HH:mm`, 12h becomes `h:mm AM/PM`).
+String _formatStoredTime(String hhmm, ThemeProvider settings) {
+  if (hhmm.isEmpty) return '';
+  final parts = hhmm.split(':');
+  final h = int.tryParse(parts[0]) ?? 0;
+  final m = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+  if (settings.use24Hour) return hhmm;
+  final period = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12;
+  if (h12 == 0) h12 = 12;
+  return '$h12:${m.toString().padLeft(2, '0')} $period';
+}
+
 class _TimeInput extends StatelessWidget {
   const _TimeInput({
     required this.value,
@@ -616,6 +632,8 @@ class _TimeInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final settings = context.watch<ThemeProvider>();
+    final display = _formatStoredTime(value, settings);
 
     return InkWell(
       onTap: () => _pickTime(context),
@@ -632,9 +650,9 @@ class _TimeInput extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                value.isNotEmpty ? value : 'Select time…',
+                display.isNotEmpty ? display : 'Select time…',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: value.isNotEmpty ? null : cs.outline,
+                      color: display.isNotEmpty ? null : cs.outline,
                     ),
               ),
             ),
@@ -646,6 +664,7 @@ class _TimeInput extends StatelessWidget {
   }
 
   Future<void> _pickTime(BuildContext context) async {
+    final settings = context.read<ThemeProvider>();
     TimeOfDay? initial;
     if (value.isNotEmpty) {
       final parts = value.split(':');
@@ -658,6 +677,11 @@ class _TimeInput extends StatelessWidget {
       context: context,
       initialTime: initial ?? TimeOfDay.now(),
       helpText: 'Select time',
+      builder: (ctx, child) => MediaQuery(
+        data: MediaQuery.of(ctx)
+            .copyWith(alwaysUse24HourFormat: settings.use24Hour),
+        child: child!,
+      ),
     );
 
     if (picked != null) {
@@ -679,12 +703,18 @@ class _TimestampPicker extends StatelessWidget {
   final DateTime timestamp;
   final ValueChanged<DateTime> onChanged;
 
-  static final _dateFormat = DateFormat('EEE, d MMM y');
-  static final _timeFormat = DateFormat('HH:mm');
+  DateFormat _dateFormat(ThemeProvider settings) =>
+      DateFormat('EEE, ${settings.longDatePattern}');
+
+  DateFormat _timeFormat(ThemeProvider settings) =>
+      DateFormat(settings.timePattern);
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final settings = context.watch<ThemeProvider>();
+    final dateFmt = _dateFormat(settings);
+    final timeFmt = _timeFormat(settings);
     final isToday = _isToday(timestamp);
 
     return Container(
@@ -702,7 +732,7 @@ class _TimestampPicker extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isToday ? 'Today' : _dateFormat.format(timestamp),
+                  isToday ? 'Today' : dateFmt.format(timestamp),
                   style: Theme.of(context)
                       .textTheme
                       .bodyMedium
@@ -710,8 +740,8 @@ class _TimestampPicker extends StatelessWidget {
                 ),
                 Text(
                   isToday
-                      ? '${_dateFormat.format(timestamp)}, ${_timeFormat.format(timestamp)}'
-                      : _timeFormat.format(timestamp),
+                      ? '${dateFmt.format(timestamp)}, ${timeFmt.format(timestamp)}'
+                      : timeFmt.format(timestamp),
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -739,6 +769,7 @@ class _TimestampPicker extends StatelessWidget {
   }
 
   Future<void> _pickDateTime(BuildContext context) async {
+    final settings = context.read<ThemeProvider>();
     final now = DateTime.now();
     final pickedDate = await showDatePicker(
       context: context,
@@ -746,6 +777,9 @@ class _TimestampPicker extends StatelessWidget {
       firstDate: DateTime(2000),
       lastDate: now,
       helpText: 'Select event date',
+      locale: settings.dateFormat == DateFormatPref.german
+          ? const Locale('de')
+          : const Locale('en'),
     );
     if (pickedDate == null || !context.mounted) return;
 
@@ -753,6 +787,11 @@ class _TimestampPicker extends StatelessWidget {
       context: context,
       initialTime: TimeOfDay.fromDateTime(timestamp),
       helpText: 'Select event time',
+      builder: (ctx, child) => MediaQuery(
+        data: MediaQuery.of(ctx)
+            .copyWith(alwaysUse24HourFormat: settings.use24Hour),
+        child: child!,
+      ),
     );
     if (pickedTime == null) return;
 
