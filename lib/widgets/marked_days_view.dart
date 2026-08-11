@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
-import '../database/database.dart';
 import '../providers/marked_days_provider.dart';
 import '../providers/theme_provider.dart';
-import '../providers/widget_manager_provider.dart';
-import '../widgets/settings_button.dart';
+import '../providers/widget_manager_provider.dart' show FieldType;
 
 // ─── Date helpers (kept local, no locale initialization required) ───────────
 
@@ -41,31 +39,27 @@ String _formatWeekday(DateTime day, DateFormatPref pref) {
 }
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
+//
+// Reusable content widget for the "Days" feature (calendar + evaluation).
+// Intentionally has no Scaffold/AppBar of its own – it is embedded as a tab
+// inside the Analytics screen, so it only provides the body content.
+// The widget keeps its state (selected calendar month, scroll position) alive
+// across tab switches via [AutomaticKeepAliveClientMixin].
 
-class MarkedDaysScreen extends StatelessWidget {
-  const MarkedDaysScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (ctx) => MarkedDaysProvider(ctx.read<AppDatabase>()),
-      child: const _MarkedDaysView(),
-    );
-  }
-}
-
-// ─── Main View ───────────────────────────────────────────────────────────────
-
-class _MarkedDaysView extends StatefulWidget {
-  const _MarkedDaysView();
+class MarkedDaysView extends StatefulWidget {
+  const MarkedDaysView({super.key});
 
   @override
-  State<_MarkedDaysView> createState() => _MarkedDaysViewState();
+  State<MarkedDaysView> createState() => _MarkedDaysViewState();
 }
 
-class _MarkedDaysViewState extends State<_MarkedDaysView> {
+class _MarkedDaysViewState extends State<MarkedDaysView>
+    with AutomaticKeepAliveClientMixin {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -77,34 +71,19 @@ class _MarkedDaysViewState extends State<_MarkedDaysView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final provider = context.watch<MarkedDaysProvider>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Days'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: () => context.read<MarkedDaysProvider>().loadData(),
-          ),
-          SettingsButton(
-            onImportComplete: () =>
-                context.read<MarkedDaysProvider>().loadData(),
-          ),
-        ],
-      ),
-      body: provider.loading
-          ? const Center(child: CircularProgressIndicator())
-          : provider.error != null
-              ? _ErrorView(
-                  error: provider.error!,
-                  onRetry: () =>
-                      context.read<MarkedDaysProvider>().loadData(),
-                )
-              : _buildContent(context, provider),
-    );
+    if (provider.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (provider.error != null) {
+      return _ErrorView(
+        error: provider.error!,
+        onRetry: () => context.read<MarkedDaysProvider>().loadData(),
+      );
+    }
+    return _buildContent(context, provider);
   }
 
   Widget _buildContent(BuildContext context, MarkedDaysProvider provider) {

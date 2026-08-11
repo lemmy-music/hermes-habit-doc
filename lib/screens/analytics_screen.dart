@@ -9,8 +9,10 @@ import 'package:provider/provider.dart';
 
 import '../database/database.dart';
 import '../providers/analytics_provider.dart';
+import '../providers/marked_days_provider.dart';
 import '../providers/theme_provider.dart';
-import '../providers/widget_manager_provider.dart';
+import '../providers/widget_manager_provider.dart' show FieldType;
+import '../widgets/marked_days_view.dart';
 import '../widgets/settings_button.dart';
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
@@ -29,53 +31,115 @@ class AnalyticsScreen extends StatelessWidget {
 
 // ─── Main Body with Tabs ─────────────────────────────────────────────────────
 
-class _AnalyticsBody extends StatelessWidget {
+class _AnalyticsBody extends StatefulWidget {
   const _AnalyticsBody();
+
+  @override
+  State<_AnalyticsBody> createState() => _AnalyticsBodyState();
+}
+
+class _AnalyticsBodyState extends State<_AnalyticsBody>
+    with SingleTickerProviderStateMixin {
+  static const int _daysTabIndex = 3;
+
+  late final TabController _tabController;
+
+  /// Lazily created the first time the user opens the "Days" tab.
+  ///
+  /// The [MarkedDaysProvider] runs a (comparatively heavy) analysis on
+  /// creation, so it must not be instantiated eagerly together with the
+  /// [AnalyticsProvider] – only when the Days tab is actually visited.
+  MarkedDaysProvider? _markedDaysProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabChanged);
+  }
+
+  @override
+  void dispose() {
+    _markedDaysProvider?.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging && _tabController.index == _daysTabIndex) {
+      _ensureMarkedDaysProvider();
+    }
+  }
+
+  void _ensureMarkedDaysProvider() {
+    if (_markedDaysProvider != null) return;
+    _markedDaysProvider = MarkedDaysProvider(context.read<AppDatabase>());
+    setState(() {});
+  }
+
+  /// Reloads the analytics data and – once the Days tab has been opened –
+  /// the marked-days data as well.
+  void _reloadAll() {
+    context.read<AnalyticsProvider>().loadData();
+    _markedDaysProvider?.loadData();
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AnalyticsProvider>();
+    final markedDaysProvider = _markedDaysProvider;
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Analytics'),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Refresh',
-              onPressed: () => context.read<AnalyticsProvider>().loadData(),
-            ),
-            SettingsButton(
-              onImportComplete: () =>
-                  context.read<AnalyticsProvider>().loadData(),
-            ),
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(icon: Icon(Icons.bar_chart), text: 'Charts'),
-              Tab(icon: Icon(Icons.grid_on), text: 'Correlation'),
-              Tab(icon: Icon(Icons.timeline), text: 'Timeline'),
-            ],
+    final Widget body;
+    if (provider.loading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (provider.error != null) {
+      body = _ErrorView(
+        error: provider.error!,
+        onRetry: () => context.read<AnalyticsProvider>().loadData(),
+      );
+    } else {
+      body = TabBarView(
+        controller: _tabController,
+        children: [
+          const _ChartsTab(),
+          const _CorrelationTab(),
+          const _TimelineTab(),
+          // Days tab: placeholder until first visited, then the content with
+          // its own provider (kept alive so the selected calendar month and
+          // scroll position survive tab switches).
+          markedDaysProvider == null
+              ? const SizedBox.shrink()
+              : ChangeNotifierProvider.value(
+                  value: markedDaysProvider,
+                  child: const MarkedDaysView(),
+                ),
+        ],
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Analytics'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _reloadAll,
           ),
+          SettingsButton(onImportComplete: _reloadAll),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.bar_chart), text: 'Charts'),
+            Tab(icon: Icon(Icons.grid_on), text: 'Correlation'),
+            Tab(icon: Icon(Icons.timeline), text: 'Timeline'),
+            Tab(icon: Icon(Icons.calendar_month), text: 'Days'),
+          ],
         ),
-        body: provider.loading
-            ? const Center(child: CircularProgressIndicator())
-            : provider.error != null
-                ? _ErrorView(
-                    error: provider.error!,
-                    onRetry: () => context.read<AnalyticsProvider>().loadData(),
-                  )
-                : const TabBarView(
-                    children: [
-                      _ChartsTab(),
-                      _CorrelationTab(),
-                      _TimelineTab(),
-                    ],
-                  ),
       ),
+      body: body,
     );
   }
 }
@@ -116,11 +180,29 @@ class _ErrorView extends StatelessWidget {
 
 // ─── Timeline Tab ─────────────────────────────────────────────────────────────
 
-class _TimelineTab extends StatelessWidget {
+class _TimelineTab extends StatefulWidget {
   const _TimelineTab();
 
   @override
+  State<_TimelineTab> createState() => _TimelineTabState();
+}
+
+class _TimelineTabState extends State<_TimelineTab>
+    with AutomaticKeepAliveClientMixin {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     final provider = context.watch<AnalyticsProvider>();
     final timeline = provider.timeline;
 
@@ -138,6 +220,7 @@ class _TimelineTab extends StatelessWidget {
         final isWide = constraints.maxWidth >= 600;
 
         return ListView.separated(
+          controller: _scrollController,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
           itemCount: timeline.length,
           separatorBuilder: (_, __) => const SizedBox(height: 4),
@@ -375,8 +458,12 @@ class _ChartsTab extends StatefulWidget {
   State<_ChartsTab> createState() => _ChartsTabState();
 }
 
-class _ChartsTabState extends State<_ChartsTab> {
+class _ChartsTabState extends State<_ChartsTab>
+    with AutomaticKeepAliveClientMixin {
   _ChartRange _range = _ChartRange.all;
+
+  @override
+  bool get wantKeepAlive => true;
 
   List<TrackingEvent> _filterByRange(List<TrackingEvent> events) {
     final duration = _range.duration;
@@ -420,6 +507,7 @@ class _ChartsTabState extends State<_ChartsTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final provider = context.watch<AnalyticsProvider>();
     final widgets = provider.widgets;
 
@@ -1206,9 +1294,13 @@ class _CorrelationTab extends StatefulWidget {
   State<_CorrelationTab> createState() => _CorrelationTabState();
 }
 
-class _CorrelationTabState extends State<_CorrelationTab> {
+class _CorrelationTabState extends State<_CorrelationTab>
+    with AutomaticKeepAliveClientMixin {
   int? _expandedWidgetId1;
   int? _expandedWidgetId2;
+
+  @override
+  bool get wantKeepAlive => true;
 
   /// True while the (synchronous) correlation math is running.
   bool _calculating = true;
@@ -1344,6 +1436,7 @@ class _CorrelationTabState extends State<_CorrelationTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final provider = context.watch<AnalyticsProvider>();
     final widgets = provider.widgets;
 
