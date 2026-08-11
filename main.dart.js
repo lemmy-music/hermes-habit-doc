@@ -106097,13 +106097,13 @@ A.a0t.prototype={
 F(a){var s,r,q,p,o,n,m,l=this,k=null,j=A.e9(a,!0,t.tB),i=A.dD(j.b,t.Vg),h=i.length
 if(h===0)return new A.r5(B.mq,"No widgets yet.","Create widgets on the Widgets tab.",k)
 if(h<2)return new A.r5(B.mq,"Need at least 2 widgets.","Create more widgets to see correlations.",k)
-for(s=!1,r=0;r<h;r=q){for(q=r+1,p=q;p<h;++p)if(j.ND(i[r].a,i[p].a,5)!=null){s=!0
+for(s=!1,r=0;r<h;r=q){for(q=r+1,p=q;p<h;++p)if(j.ND(i[r].a,i[p].a,1)!=null){s=!0
 break}if(s)break}h=A.v(a).ax
 o=h.p3
 h=o==null?h.k2:o
 o=t.p
-h=A.b([A.Dm(new A.aR(B.qn,A.cf(A.b([A.ew(B.Lp,A.v(a).ax.b,k,20),B.c4,A.cx(A.aH("Pearson correlation between widgets (requires \u22655 overlapping days). Green = positive, Red = negative, Grey = insufficient data.",k,k,k,k,A.v(a).ok.Q,k,k,k),1)],o),B.C,B.m,B.z,0,k),k),h,k,k,k),B.bb],o)
-if(!s)h.push(new A.r5(B.r3,"Not enough data for correlations.","Track at least 5 overlapping days across 2+ widgets.",k))
+h=A.b([A.Dm(new A.aR(B.qn,A.cf(A.b([A.ew(B.Lp,A.v(a).ax.b,k,20),B.c4,A.cx(A.aH("Pearson correlation between widgets (temporarily no min. days; final: \u22655 overlapping days). Green = positive, Red = negative, Grey = insufficient data.",k,k,k,k,A.v(a).ok.Q,k,k,k),1)],o),B.C,B.m,B.z,0,k),k),h,k,k,k),B.bb],o)
+if(!s)h.push(new A.r5(B.r3,"Not enough data for correlations.","Track some overlapping days across 2+ widgets.",k))
 else{n=A.v(a).ok.w
 o=A.b([A.aH("Correlation Matrix",k,k,k,k,n==null?k:n.mQ(B.bj),k,k,k),B.e_,new A.a0s(i,j,new A.aBi(l),k)],o)
 n=l.d
@@ -106163,7 +106163,7 @@ A.aBf.prototype={
 $1(a){var s,r,q,p,o,n,m=this,l=null,k=m.a,j=k.c,i=m.b,h=j[i]
 j=j[a]
 s=i===a
-r=s?0:5
+r=s?0:1
 q=k.d.ND(h.a,j.a,r)
 r=m.c
 p=k.agg(q,r)
@@ -106189,7 +106189,7 @@ if(s>=0.7)return"Strong"
 if(s>=0.4)return"Moderate"
 if(s>=0.2)return"Weak"
 return"Very weak"},
-F(b4){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8=this,a9=null,b0=a8.e,b1=a8.c,b2=a8.d,b3=b0.ND(b1,b2,5)
+F(b4){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8=this,a9=null,b0=a8.e,b1=a8.c,b2=a8.d,b3=b0.ND(b1,b2,1)
 if(b3==null)return B.a1
 s=a8.f
 r=A.Z(s).h("aK<1>")
