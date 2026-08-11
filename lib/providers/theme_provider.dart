@@ -59,6 +59,28 @@ class ThemeProvider extends ChangeNotifier {
   /// Time pattern for the selected preference (e.g. `HH:mm`).
   String get timePattern => use24Hour ? 'HH:mm' : 'h:mm a';
 
+  /// Returns the `builder` for [showTimePicker] that makes the picker honor
+  /// [use24Hour] exclusively — independent of the app locale.
+  ///
+  /// Flutter's German (`de`) Material localizations always render times in
+  /// 24-hour format (`timeOfDayFormatRaw` is `HH_colon_mm`), so a plain
+  /// `MediaQuery.alwaysUse24HourFormat` override cannot produce a 12-hour
+  /// clock while the app locale is German. Pinning the picker subtree to the
+  /// `en` locale (whose raw format is `h:mm AM/PM`) lets the
+  /// `MediaQuery.alwaysUse24HourFormat` flag decide the clock style, so the
+  /// persisted [TimeFormatPref] alone controls 24h vs. 12h.
+  static TransitionBuilder timePickerBuilder(bool use24Hour) {
+    return (context, child) => Localizations.override(
+          context: context,
+          locale: const Locale('en'),
+          child: MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(alwaysUse24HourFormat: use24Hour),
+            child: child!,
+          ),
+        );
+  }
+
   /// Call once at startup (before runApp or inside FutureBuilder).
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();

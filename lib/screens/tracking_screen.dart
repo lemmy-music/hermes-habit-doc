@@ -677,11 +677,7 @@ class _TimeInput extends StatelessWidget {
       context: context,
       initialTime: initial ?? TimeOfDay.now(),
       helpText: 'Select time',
-      builder: (ctx, child) => MediaQuery(
-        data: MediaQuery.of(ctx)
-            .copyWith(alwaysUse24HourFormat: settings.use24Hour),
-        child: child!,
-      ),
+      builder: ThemeProvider.timePickerBuilder(settings.use24Hour),
     );
 
     if (picked != null) {
@@ -787,11 +783,7 @@ class _TimestampPicker extends StatelessWidget {
       context: context,
       initialTime: TimeOfDay.fromDateTime(timestamp),
       helpText: 'Select event time',
-      builder: (ctx, child) => MediaQuery(
-        data: MediaQuery.of(ctx)
-            .copyWith(alwaysUse24HourFormat: settings.use24Hour),
-        child: child!,
-      ),
+      builder: ThemeProvider.timePickerBuilder(settings.use24Hour),
     );
     if (pickedTime == null) return;
 
