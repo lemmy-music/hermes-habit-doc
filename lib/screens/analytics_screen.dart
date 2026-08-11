@@ -1210,7 +1210,8 @@ class _CorrelationTabState extends State<_CorrelationTab> {
                   Expanded(
                     child: Text(
                       'Pearson correlation between widgets (temporarily no min. days; final: ≥5 overlapping days). '
-                      'Green = positive, Red = negative, Grey = insufficient data.',
+                      'Green = positive, Red = negative, Grey = insufficient data. '
+                      'Tippe auf eine Zelle für Details.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
@@ -1245,6 +1246,23 @@ class _CorrelationTabState extends State<_CorrelationTab> {
                         key: _resultsKey,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.touch_app,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Tippe auf eine Zelle für Details (z. B. Scatter-Plot).',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           _CorrelationHeatmap(
                             widgets: widgets,
                             matrix: _matrix ?? [],
@@ -1436,33 +1454,16 @@ class _CorrelationHeatmap extends StatelessWidget {
                     final txtColor = _textColor(result, cs);
                     final isClickable = i != j && result != null;
 
-                    return GestureDetector(
+                    return _CorrelationCell(
+                      key: ValueKey('corr-cell-$i-$j'),
+                      cellSize: cellSize,
+                      bgColor: bgColor,
+                      textColor: txtColor,
+                      label: _cellLabel(result),
+                      isClickable: isClickable,
                       onTap: isClickable
                           ? () => onCellTap(widgets[i].id, widgets[j].id)
                           : null,
-                      child: Container(
-                        width: cellSize,
-                        height: 44,
-                        margin: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.circular(6),
-                          border: isClickable
-                              ? Border.all(
-                                  color: cs.outline.withAlpha(60), width: 1)
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            _cellLabel(result),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: txtColor,
-                            ),
-                          ),
-                        ),
-                      ),
                     );
                   }),
                 ],
@@ -1487,6 +1488,101 @@ class _CorrelationHeatmap extends StatelessWidget {
         ),
       );
     });
+  }
+}
+
+/// Single heatmap cell with click/hover affordances.
+///
+/// Only cells with [isClickable] == true react to input: they get a pointer
+/// cursor, a hover highlight, a tooltip and a small touch icon so users know
+/// they can tap for details (scatter plot etc.).
+class _CorrelationCell extends StatefulWidget {
+  const _CorrelationCell({
+    super.key,
+    required this.cellSize,
+    required this.bgColor,
+    required this.textColor,
+    required this.label,
+    required this.isClickable,
+    required this.onTap,
+  });
+
+  final double cellSize;
+  final Color bgColor;
+  final Color textColor;
+  final String label;
+  final bool isClickable;
+  final VoidCallback? onTap;
+
+  @override
+  State<_CorrelationCell> createState() => _CorrelationCellState();
+}
+
+class _CorrelationCellState extends State<_CorrelationCell> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final clickable = widget.isClickable;
+
+    final cell = GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        width: widget.cellSize,
+        height: 44,
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: _hovered
+              ? Color.lerp(widget.bgColor, Colors.white, 0.12)
+              : widget.bgColor,
+          borderRadius: BorderRadius.circular(6),
+          border: clickable
+              ? Border.all(
+                  color: _hovered ? cs.primary : cs.outline.withAlpha(90),
+                  width: _hovered ? 2 : 1,
+                )
+              : null,
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Text(
+              widget.label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: widget.textColor,
+              ),
+            ),
+            if (clickable)
+              Positioned(
+                top: 1,
+                right: 2,
+                child: Icon(
+                  Icons.touch_app,
+                  size: 9,
+                  color: widget.textColor.withAlpha(160),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    return MouseRegion(
+      cursor: clickable ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: clickable ? (_) => setState(() => _hovered = true) : null,
+      onExit: clickable ? (_) => setState(() => _hovered = false) : null,
+      child: clickable
+          ? Tooltip(
+              message: 'Details anzeigen',
+              waitDuration: const Duration(milliseconds: 400),
+              child: cell,
+            )
+          : cell,
+    );
   }
 }
 
