@@ -350,8 +350,37 @@ class _EventTile extends StatelessWidget {
 
 // ─── Charts Tab ───────────────────────────────────────────────────────────────
 
-class _ChartsTab extends StatelessWidget {
+/// Zeitraum-Filter, der global für alle Zeit-Plots im Charts-Tab gilt.
+enum _ChartRange {
+  all('Alle', null),
+  week('Letzte Woche', Duration(days: 7)),
+  month('Letzter Monat', Duration(days: 30)),
+  year('Letztes Jahr', Duration(days: 365));
+
+  const _ChartRange(this.label, this.duration);
+
+  final String label;
+
+  /// Länge des Zeitraums; `null` = alle Daten.
+  final Duration? duration;
+}
+
+class _ChartsTab extends StatefulWidget {
   const _ChartsTab();
+
+  @override
+  State<_ChartsTab> createState() => _ChartsTabState();
+}
+
+class _ChartsTabState extends State<_ChartsTab> {
+  _ChartRange _range = _ChartRange.all;
+
+  List<TrackingEvent> _filterByRange(List<TrackingEvent> events) {
+    final duration = _range.duration;
+    if (duration == null) return events;
+    final cutoff = DateTime.now().subtract(duration);
+    return events.where((e) => e.timestamp.isAfter(cutoff)).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -366,16 +395,121 @@ class _ChartsTab extends StatelessWidget {
       );
     }
 
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: widgets.length,
-      itemBuilder: (context, i) {
-        final w = widgets[i];
-        final events = provider.eventsForWidget(w.id);
-        return _WidgetChartCard(widget: w, events: events);
-      },
+      children: [
+        _RangeFilterSelector(
+          selected: _range,
+          onChanged: (range) => setState(() => _range = range),
+        ),
+        const SizedBox(height: 12),
+        for (final w in widgets)
+          _WidgetChartCard(
+            widget: w,
+            events: _filterByRange(provider.eventsForWidget(w.id)),
+          ),
+      ],
     );
   }
+}
+
+/// Horizontal scrollbare Auswahl für den globalen Zeitraum-Filter
+/// (mobile-first, kein Überlauf auf schmalen Bildschirmen).
+class _RangeFilterSelector extends StatelessWidget {
+  const _RangeFilterSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final _ChartRange selected;
+  final ValueChanged<_ChartRange> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Zeitraum',
+          style: Theme.of(context)
+              .textTheme
+              .labelLarge
+              ?.copyWith(color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final range in _ChartRange.values) ...[
+                ChoiceChip(
+                  label: Text(range.label),
+                  selected: range == selected,
+                  showCheckmark: false,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (_) => onChanged(range),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Lineare Zeitachse (Hilfsfunktionen) ─────────────────────────────────────
+// Alle Zeit-Plots verwenden eine echte, lineare Zeitachse: Die X-Koordinate
+// jedes Punktes ist der Zeitstempel des Events in Tagen seit Epoche (double).
+// Dadurch entspricht der Abstand zweier Punkte exakt ihrem realen zeitlichen
+// Abstand. Die X-Ticks werden aus diesen Zeitwerten erzeugt – nicht aus dem
+// Punkt-Index. Beschriftungen sind deutsche Datumsformate (TT.MM.).
+
+/// Wandelt einen [DateTime] in den linearen X-Wert (Tage seit Epoche) um.
+double _timeToX(DateTime t) =>
+    t.millisecondsSinceEpoch / Duration.millisecondsPerDay;
+
+/// Wandelt einen linearen X-Wert (Tage seit Epoche) zurück in einen [DateTime].
+DateTime _xToTime(double x) => DateTime.fromMillisecondsSinceEpoch(
+    (x * Duration.millisecondsPerDay).round());
+
+/// Wählt eine gut lesbare Tick-Schrittweite (in Tagen), sodass der sichtbare
+/// Bereich ca. 4–6 gleichmäßige Zeitpunkte erhält.
+double _pickTickStep(double spanDays) {
+  const niceSteps = <double>[
+    1 / 24, // 1 Stunde
+    3 / 24, // 3 Stunden
+    6 / 24, // 6 Stunden
+    12 / 24, // 12 Stunden
+    1, // 1 Tag
+    2,
+    3,
+    7, // 1 Woche
+    14,
+    30, // ~1 Monat
+    60,
+    90,
+    182, // ~6 Monate
+    365, // 1 Jahr
+  ];
+  for (final step in niceSteps) {
+    if (spanDays / step <= 5) return step;
+  }
+  return (spanDays / 5).ceilToDouble();
+}
+
+/// Formatiert einen linearen Zeit-X-Wert als deutsches Datum (TT.MM.).
+String _formatTimeTick(double x, double spanDays) {
+  final dt = _xToTime(x);
+  if (spanDays <= 2) {
+    return DateFormat('dd.MM. HH:mm').format(dt);
+  }
+  if (spanDays <= 120) {
+    return DateFormat('dd.MM.').format(dt);
+  }
+  return DateFormat('dd.MM.yy').format(dt);
 }
 
 class _WidgetChartCard extends StatelessWidget {
@@ -486,10 +620,11 @@ class _LineChartWidget extends StatelessWidget {
     final sorted = [...events]
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
+    // X = echter Zeitstempel (Tage seit Epoche) → lineare Zeitachse
     final spots = <FlSpot>[];
-    for (int i = 0; i < sorted.length; i++) {
-      final v = double.tryParse(sorted[i].value);
-      if (v != null) spots.add(FlSpot(i.toDouble(), v));
+    for (final event in sorted) {
+      final v = double.tryParse(event.value);
+      if (v != null) spots.add(FlSpot(_timeToX(event.timestamp), v));
     }
 
     if (spots.isEmpty) {
@@ -511,16 +646,27 @@ class _LineChartWidget extends StatelessWidget {
       maxY += pad;
     }
 
-    final maxX = spots.length <= 1 ? 1.0 : (spots.length - 1).toDouble();
+    // Lineare Zeitachse über den Datenbereich
+    var minX = spots.map((s) => s.x).reduce(min);
+    var maxX = spots.map((s) => s.x).reduce(max);
+    if (minX == maxX) {
+      // Nur ein Datenpunkt → kleines Fenster um den Punkt herum anzeigen.
+      minX -= 0.5;
+      maxX += 0.5;
+    } else {
+      final pad = (maxX - minX) * 0.02;
+      minX -= pad;
+      maxX += pad;
+    }
+    final spanDays = maxX - minX;
 
-    // Determine bottom-axis label interval
-    final interval = (spots.length <= 7)
-        ? 1.0
-        : (spots.length / 5).ceilToDouble();
+    // Tick-Intervall (in Tagen) für ~4–6 gut lesbare Zeitpunkte
+    var interval = _pickTickStep(spanDays);
+    if (spanDays / interval < 2) interval = spanDays / 4;
 
     return LineChart(
       LineChartData(
-        minX: 0,
+        minX: minX,
         maxX: maxX,
         minY: minY,
         maxY: maxY,
@@ -580,16 +726,15 @@ class _LineChartWidget extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               interval: interval,
-              reservedSize: 28,
+              reservedSize: 30,
               getTitlesWidget: (value, meta) {
-                final idx = value.round();
-                if (idx < 0 || idx >= sorted.length) {
+                if (value == meta.min || value == meta.max) {
                   return const SizedBox.shrink();
                 }
                 return Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    DateFormat('M/d').format(sorted[idx].timestamp),
+                    _formatTimeTick(value, spanDays),
                     style: TextStyle(
                       fontSize: 9,
                       color: cs.onSurfaceVariant,
@@ -636,67 +781,45 @@ class _CheckboxChart extends StatelessWidget {
 
     final cs = Theme.of(context).colorScheme;
 
-    // If all same value, show a simple message + pie
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: PieChart(
-            PieChartData(
-              sections: [
-                if (trueCount > 0)
-                  PieChartSectionData(
-                    value: trueCount.toDouble(),
-                    title: 'Yes\n$trueCount',
-                    color: Colors.green.shade400,
-                    radius: 70,
-                    titleStyle: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                if (falseCount > 0)
-                  PieChartSectionData(
-                    value: falseCount.toDouble(),
-                    title: 'No\n$falseCount',
-                    color: cs.error.withAlpha(200),
-                    radius: 70,
-                    titleStyle: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-              ],
-              sectionsSpace: 3,
-              centerSpaceRadius: 30,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 2,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _LegendItem(
+    // Nur die Inline-Beschriftungen im Diagramm (Ja/Nein + Anzahl) bleiben –
+    // die äußere Legende entfällt, da eine Checkbox nur 2 Kategorien hat und
+    // die Inline-Labels sonst doppelt vorhanden wären.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: PieChart(
+        PieChartData(
+          sections: [
+            if (trueCount > 0)
+              PieChartSectionData(
+                value: trueCount.toDouble(),
+                title: 'Ja\n$trueCount',
+                showTitle: true,
                 color: Colors.green.shade400,
-                label: 'Yes',
-                count: trueCount,
-                total: events.length,
+                radius: 70,
+                titleStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
-              const SizedBox(height: 8),
-              _LegendItem(
+            if (falseCount > 0)
+              PieChartSectionData(
+                value: falseCount.toDouble(),
+                title: 'Nein\n$falseCount',
+                showTitle: true,
                 color: cs.error.withAlpha(200),
-                label: 'No',
-                count: falseCount,
-                total: events.length,
+                radius: 70,
+                titleStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
-            ],
-          ),
+          ],
+          sectionsSpace: 3,
+          centerSpaceRadius: 30,
         ),
-      ],
+      ),
     );
   }
 }
@@ -731,9 +854,11 @@ class _DurationChart extends StatelessWidget {
     final sorted = [...events]
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
+    // X = echter Zeitstempel (Tage seit Epoche) → lineare Zeitachse
     final spots = <FlSpot>[];
-    for (int i = 0; i < sorted.length; i++) {
-      spots.add(FlSpot(i.toDouble(), _toMinutes(sorted[i].value).toDouble()));
+    for (final event in sorted) {
+      spots.add(
+          FlSpot(_timeToX(event.timestamp), _toMinutes(event.value).toDouble()));
     }
 
     if (spots.isEmpty) return const Center(child: Text('No data'));
@@ -742,14 +867,28 @@ class _DurationChart extends StatelessWidget {
     if (maxY == 0) maxY = 60;
     maxY = maxY * 1.15;
 
-    final interval = (spots.length <= 7)
-        ? 1.0
-        : (spots.length / 5).ceilToDouble();
+    // Lineare Zeitachse über den Datenbereich
+    var minX = spots.map((s) => s.x).reduce(min);
+    var maxX = spots.map((s) => s.x).reduce(max);
+    if (minX == maxX) {
+      // Nur ein Datenpunkt → kleines Fenster um den Punkt herum anzeigen.
+      minX -= 0.5;
+      maxX += 0.5;
+    } else {
+      final pad = (maxX - minX) * 0.02;
+      minX -= pad;
+      maxX += pad;
+    }
+    final spanDays = maxX - minX;
+
+    // Tick-Intervall (in Tagen) für ~4–6 gut lesbare Zeitpunkte
+    var interval = _pickTickStep(spanDays);
+    if (spanDays / interval < 2) interval = spanDays / 4;
 
     return LineChart(
       LineChartData(
-        minX: 0,
-        maxX: spots.length <= 1 ? 1.0 : (spots.length - 1).toDouble(),
+        minX: minX,
+        maxX: maxX,
         minY: 0,
         maxY: maxY,
         lineBarsData: [
@@ -802,16 +941,15 @@ class _DurationChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               interval: interval,
-              reservedSize: 28,
+              reservedSize: 30,
               getTitlesWidget: (value, meta) {
-                final idx = value.round();
-                if (idx < 0 || idx >= sorted.length) {
+                if (value == meta.min || value == meta.max) {
                   return const SizedBox.shrink();
                 }
                 return Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    DateFormat('M/d').format(sorted[idx].timestamp),
+                    _formatTimeTick(value, spanDays),
                     style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
                   ),
                 );
@@ -865,11 +1003,12 @@ class _TimeChart extends StatelessWidget {
     final sorted = [...events]
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
+    // X = echter Zeitstempel (Tage seit Epoche) → lineare Zeitachse
     final spots = <FlSpot>[];
-    for (int i = 0; i < sorted.length; i++) {
+    for (final event in sorted) {
       spots.add(FlSpot(
-          i.toDouble(),
-          _toMinutesSinceMidnight(sorted[i].value).toDouble()));
+          _timeToX(event.timestamp),
+          _toMinutesSinceMidnight(event.value).toDouble()));
     }
 
     if (spots.isEmpty) return const Center(child: Text('No data'));
@@ -885,14 +1024,28 @@ class _TimeChart extends StatelessWidget {
       maxY = (maxY + pad).clamp(0, 1439);
     }
 
-    final interval = (spots.length <= 7)
-        ? 1.0
-        : (spots.length / 5).ceilToDouble();
+    // Lineare Zeitachse über den Datenbereich
+    var minX = spots.map((s) => s.x).reduce(min);
+    var maxX = spots.map((s) => s.x).reduce(max);
+    if (minX == maxX) {
+      // Nur ein Datenpunkt → kleines Fenster um den Punkt herum anzeigen.
+      minX -= 0.5;
+      maxX += 0.5;
+    } else {
+      final pad = (maxX - minX) * 0.02;
+      minX -= pad;
+      maxX += pad;
+    }
+    final spanDays = maxX - minX;
+
+    // Tick-Intervall (in Tagen) für ~4–6 gut lesbare Zeitpunkte
+    var interval = _pickTickStep(spanDays);
+    if (spanDays / interval < 2) interval = spanDays / 4;
 
     return LineChart(
       LineChartData(
-        minX: 0,
-        maxX: spots.length <= 1 ? 1.0 : (spots.length - 1).toDouble(),
+        minX: minX,
+        maxX: maxX,
         minY: minY,
         maxY: maxY,
         lineBarsData: [
@@ -945,16 +1098,15 @@ class _TimeChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               interval: interval,
-              reservedSize: 28,
+              reservedSize: 30,
               getTitlesWidget: (value, meta) {
-                final idx = value.round();
-                if (idx < 0 || idx >= sorted.length) {
+                if (value == meta.min || value == meta.max) {
                   return const SizedBox.shrink();
                 }
                 return Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    DateFormat('M/d').format(sorted[idx].timestamp),
+                    _formatTimeTick(value, spanDays),
                     style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
                   ),
                 );
@@ -978,49 +1130,6 @@ class _TimeChart extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  const _LegendItem({
-    required this.color,
-    required this.label,
-    required this.count,
-    required this.total,
-  });
-  final Color color;
-  final String label;
-  final int count;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    final pct = total > 0 ? (count / total * 100).toStringAsFixed(0) : '0';
-    return Row(
-      children: [
-        Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            Text('$count ($pct%)',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: Theme.of(context).colorScheme.outline)),
-          ],
-        ),
-      ],
     );
   }
 }
